@@ -7,7 +7,7 @@ import 'tabs/patterns_tab.dart';
 import 'tabs/sanctuary_tab.dart';
 import 'tabs/profile_tab.dart';
 import '../widgets/paper_background.dart';
-import '../theme/colors.dart';
+import '../theme/colors.dart'; // Uses the new Matcha Palette
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -36,25 +36,26 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true, 
+      backgroundColor: AppColors.paperBackground, // Beige
       
       body: PaperBackground(
         child: _tabs[_currentIndex],
       ),
 
-      // FAB (The Ink Pen)
+      // FAB (The Ink Pen) - Back to INK color (Dark Brown)
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: SizedBox(
         height: 65, width: 65,
         child: FloatingActionButton(
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const WriteScreen())),
-          backgroundColor: AppColors.ink,
+          backgroundColor: AppColors.ink, // <--- RESTORED TO INK
           elevation: 5,
           shape: const CircleBorder(),
           child: const Icon(FontAwesomeIcons.penNib, color: Colors.white, size: 24),
         ),
       ),
 
-      // NAV BAR (Floating Pill)
+      // NAV BAR (Cream Pill)
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         color: Colors.transparent,
@@ -62,7 +63,7 @@ class _MainScreenState extends State<MainScreen> {
           height: 70,
           decoration: BoxDecoration(
             color: AppColors.cardColor,
-            borderRadius: BorderRadius.circular(40), // Super Rounded
+            borderRadius: BorderRadius.circular(40), 
             boxShadow: [
               BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 5))
             ]
@@ -86,6 +87,7 @@ class _MainScreenState extends State<MainScreen> {
     final isSelected = _currentIndex == index;
     return IconButton(
       icon: Icon(icon, size: 28),
+      // Back to INK for selected state
       color: isSelected ? AppColors.ink : AppColors.stone.withOpacity(0.5),
       onPressed: () => _onItemTapped(index),
     );
