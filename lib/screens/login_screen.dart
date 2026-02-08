@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart'; // REQUIRED IMPORT
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // 1. Import dotenv
 import '../theme/colors.dart';
-// Note: No need to import MainScreen, AuthGate handles it.
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -42,7 +43,6 @@ class _LoginScreenState extends State<LoginScreen> {
             content: Text("Account created! Verification link sent to email."),
             backgroundColor: AppColors.sage,
           ));
-          // Switch to login mode so they can sign in after verifying
           setState(() => isSignUp = false);
         }
       } else {
@@ -51,7 +51,6 @@ class _LoginScreenState extends State<LoginScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        // AuthGate will automatically detect the login and move you.
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
@@ -65,29 +64,37 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- GOOGLE SIGN IN (FIXED) ---
+  // --- GOOGLE SIGN IN (USING .ENV) ---
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      // 1. Trigger the authentication flow
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      // 2. Load the Client ID from the .env file
+      // This is the Flutter equivalent of os.getenv("GOOGLE_WEB_CLIENT_ID")
+      final String? clientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
+
+      if (clientId == null) {
+        print("⚠️ Warning: GOOGLE_WEB_CLIENT_ID is missing in .env file");
+      }
+
+      // 3. Pass it to the GoogleSignIn constructor
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        clientId: clientId, 
+      );
+
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       
       if (googleUser == null) {
-        // User canceled the sign-in
         setState(() => _isLoading = false);
         return;
       }
 
-      // 2. Obtain the auth details from the request
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
-      // 3. Create a new credential
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // 4. Sign in to Firebase with the Google Credential
       await FirebaseAuth.instance.signInWithCredential(credential);
       
     } catch (e) {
@@ -117,11 +124,13 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppColors.ink),
-                onPressed: () => Navigator.pop(context),
-              ),
+              if (Navigator.canPop(context))
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+                  onPressed: () => Navigator.pop(context),
+                ),
               const SizedBox(height: 30),
+              
               Text(isSignUp ? "Begin Journal." : "Welcome Back.", style: GoogleFonts.domine(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.ink)),
               const SizedBox(height: 12),
               Text(isSignUp ? "A safe space for your mind." : "Resume your story.", style: GoogleFonts.lato(fontSize: 18, color: AppColors.stone)),
@@ -140,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
               
               const SizedBox(height: 40),
               
-              // THE MAIN BUTTON
+              // MAIN BUTTON
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -167,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// ... (Keep the _LightInput and _SocialButton classes from your original file)
+// ... (Helper widgets remain unchanged)
 class _LightInput extends StatelessWidget {
   final TextEditingController controller;
   final String label;
