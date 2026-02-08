@@ -24,7 +24,7 @@ try:
 except Exception as e:
     print(f"⚠️ Groq Client Error: {e}")
 
-# Initialize Spotify (Generic - for searching covers)
+# Initialize Spotify (Generic - for searching covers & artists)
 try:
     sp_generic = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
         client_id=SPOTIFY_CLIENT_ID,
@@ -36,10 +36,9 @@ except Exception as e:
 app = FastAPI()
 
 # --- CORS (SECURITY) SETUP ---
-# This allows your Flutter app (from Chrome or Android) to talk to this server.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow ALL origins (good for development)
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,7 +54,6 @@ class JournalEntry(BaseModel):
     lat: float = 0.0
     lon: float = 0.0
     local_time: str = "12:00 PM"
-    # Defaults to "General Pop" for Chrome/Bypass testing
     music_profile: Optional[str] = "General Pop" 
 
 class DailyLog(BaseModel):
@@ -76,7 +74,7 @@ def call_llama(prompt):
     try:
         completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.3-70b-versatile", # UPDATED MODEL
+            model="llama-3.3-70b-versatile",
             temperature=0.6,
             response_format={"type": "json_object"} 
         )
@@ -85,37 +83,50 @@ def call_llama(prompt):
         print(f"⚠️ Groq Error: {e}")
         return None
 
-# --- ENDPOINT: SPOTIFY SYNC (One-Time Setup) ---
-@app.post("/sync-spotify-data")
-def sync_spotify(request: SpotifyTokenRequest):
-    print("🎵 Syncing User Music Taste...")
+# --- ENDPOINT 1: ARTIST SEARCH (For Onboarding) ---
+@app.get("/search-artists")
+def search_artists(q: str = ""):
+    print(f"🔎 Searching for artist: {q}")
     try:
-        sp_user = spotipy.Spotify(auth=request.token)
-        
-        # Get Top 20 Artists & Tracks to build a "DNA Profile"
-        top_artists = sp_user.current_user_top_artists(limit=20, time_range='medium_term')
-        artist_names = [a['name'] for a in top_artists['items']]
-        
-        top_tracks = sp_user.current_user_top_tracks(limit=20, time_range='medium_term')
-        track_names = [f"{t['name']} by {t['artists'][0]['name']}" for t in top_tracks['items']]
-        
-        # Create a descriptive string for the AI
-        profile_text = f"User loves artists: {', '.join(artist_names)}. Loves songs: {', '.join(track_names)}."
-        
-        print(f"✅ Success! Created Taste Profile with {len(artist_names)} artists.")
-        return {"music_profile": profile_text}
+        # If query is empty, return trending/popular artists
+        if not q:
+            popular_ids = [
+                "06HL4z0CvFAsei5YN2709F", # Taylor Swift
+                "1Xyo4u8uXC1ZmMpatF05PJ", # The Weeknd
+                "3Nrfpe0tUJi4Q4DXYWgMUX", # BTS
+                "4YRxEOlBFzK056c9cEL9wz", # Arijit Singh
+                "1uNFoZAHBGtllmzznpCI3s", # Justin Bieber
+                "5pKCCKE2ajJHZ9KAiaK11H", # Rihanna
+                "3TVXtAsR1Inumwj472S9r4", # Drake
+                "6eUKZXaKkcviH0Ku9w2n3V", # Ed Sheeran
+                "0du5cEVh5yTK9QJze8zA0C", # Bruno Mars
+            ]
+            results = sp_generic.artists(popular_ids)
+            return {
+                "artists": [
+                    {"name": a['name'], "image": a['images'][0]['url'] if a['images'] else None, "id": a['id']}
+                    for a in results['artists']
+                ]
+            }
 
+        # Otherwise, search Spotify
+        results = sp_generic.search(q=q, type='artist', limit=5)
+        return {
+            "artists": [
+                {"name": a['name'], "image": a['images'][0]['url'] if a['images'] else None, "id": a['id']}
+                for a in results['artists']['items']
+            ]
+        }
     except Exception as e:
-        print(f"❌ Spotify Sync Error (Ignored for Bypass): {e}")
-        # FAIL-SAFE: Return dummy profile so app doesn't crash
-        return {"music_profile": "General Pop"}
+        print(f"❌ Search Error: {e}")
+        return {"artists": []}
 
-# --- ENDPOINT 1: INSTANT DAILY ANALYSIS ---
+# --- ENDPOINT 2: INSTANT DAILY ANALYSIS ---
 @app.post("/analyze")
 def analyze_mood(entry: JournalEntry):
-    print(f"📝 Analyzing Entry (Profile: {entry.music_profile[:20]}...)...")
+    print(f"📝 Analyzing Entry (Profile: {entry.music_profile})...")
     
-    # Defaults (Fallback)
+    # Defaults
     data = {
         "mood": "Calm", "artist": "Lofi Girl", "reason": "Just breathing.", 
         "score": 5, "track_name": "lofi hip hop radio", 
@@ -123,25 +134,27 @@ def analyze_mood(entry: JournalEntry):
     }
 
     try:
-        # PROMPT: STRICT SCORING RUBRIC ADDED
         prompt = f"""
         Analyze this diary entry: "{entry.text}" (Time: {entry.local_time}).
         
-        USER TASTE PROFILE:
+        USER TASTE PROFILE (The user LOVES these artists):
         "{entry.music_profile}"
         
         Task:
         1. Identify the Mood (1 word) & Score (1-10).
-           🔴 CRITICAL SCORING RUBRIC (YOU MUST FOLLOW THIS):
-           - 1 to 3: High Distress, Sadness, Anxiety, Anger, Grief. (User is struggling).
-           - 4 to 6: Neutral, Calm, Tired, Bored, "Just Okay".
-           - 7 to 10: Happy, Excited, Grateful, Radiant, Proud.
+           🔴 SCORING RUBRIC:
+           - 1-3: High Distress (Sadness, Anxiety, Anger).
+           - 4-6: Neutral, Calm, Bored.
+           - 7-10: Happy, Excited, Proud.
         
         2. Suggest ONE song.
-           - CONDITION: If Profile is "General Pop" or empty, suggest ANY high-quality song that matches the mood perfectly.
-           - CONDITION: If Profile has specific artists, suggest a song that matches their *style* (does not have to be exactly from the list).
+           🔴 RECOMMENDATION RULES (CRITICAL):
+           - If the user has specific artists in their PROFILE, prioritize a song by those artists (or a very similar style) that matches the MOOD.
+           - Example: If user loves "Taylor Swift" and is Sad -> Suggest "this is me trying" or "All Too Well".
+           - Example: If user loves "The Weeknd" and is Happy -> Suggest "Starboy" or "Blinding Lights".
+           - ANTI-CLICHÉ: Do NOT suggest "Happy" by Pharrell or "Someone Like You" by Adele unless explicitly requested.
         
-        3. Give a short reason.
+        3. Give a short reason (mentioning their taste if relevant).
 
         Return JSON keys: mood, artist, track_name, reason, score.
         """
@@ -150,7 +163,7 @@ def analyze_mood(entry: JournalEntry):
         if ai_data:
             data.update(ai_data)
 
-            # Search generic spotify to get the cover art for the suggested song
+            # Search generic spotify to get the cover art
             query = f"track:{data.get('track_name', '')} artist:{data.get('artist', '')}"
             results = sp_generic.search(q=query, type='track', limit=1)
             if results['tracks']['items']:
@@ -164,12 +177,11 @@ def analyze_mood(entry: JournalEntry):
 
     return data
 
-# --- ENDPOINT 2: WEEKLY REPORT ---
+# --- ENDPOINT 3: WEEKLY REPORT ---
 @app.post("/analyze-mood-music")
 def analyze_week(request: AnalysisRequest):
     print(f"🧠 Deep Analyzing {len(request.logs)} entries...")
     
-    # Format history for the prompt
     history = "\n".join([f"- {l.date}: {l.mood_score}/10 mood. Intent: {l.intention}. Wrote: {l.journal_content}" for l in request.logs])
 
     prompt = f"""
@@ -182,17 +194,17 @@ def analyze_week(request: AnalysisRequest):
     {history}
 
     Task:
-    1. Find a psychological pattern (e.g., "You tend to feel anxious on Sunday nights").
+    1. Find a psychological pattern.
     2. Curate a "Mood Uplift" Playlist of 5 songs.
-       - IF PROFILE IS "General Pop": Just pick 5 excellent songs that match the mood solution.
-       - OTHERWISE: Use their taste profile as a style guide.
+       - STRICTLY follow the User's Taste Profile for genre/style.
+       - If they like Rap, give Rap. If they like Indie, give Indie.
     3. Give 1 sentence of actionable advice.
 
     Return JSON:
     {{
-        "mood_summary": "String (e.g., 'Reflective Week')",
+        "mood_summary": "String",
         "pattern_insight": "String",
-        "playlist_title": "String (e.g., 'Sunday Reset')",
+        "playlist_title": "String",
         "suggested_tracks": ["Song - Artist", "Song - Artist", "Song - Artist", "Song - Artist", "Song - Artist"],
         "advice": "String"
     }}
@@ -203,9 +215,6 @@ def analyze_week(request: AnalysisRequest):
     except Exception as e:
         print(f"❌ Error: {e}")
         return {
-            "mood_summary": "Neutral", 
-            "pattern_insight": "Keep writing to see patterns.", 
-            "playlist_title": "Daily Mix", 
-            "suggested_tracks": [], 
-            "advice": "Take it one day at a time."
+            "mood_summary": "Neutral", "pattern_insight": "Keep writing.", 
+            "playlist_title": "Daily Mix", "suggested_tracks": [], "advice": "Take it easy."
         }

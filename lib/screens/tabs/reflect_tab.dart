@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../../theme/colors.dart';
-import '../writing_page.dart'; // IMPORT THE NEW PAGE
+import '../writing_page.dart'; // Make sure this import exists
 
 class ReflectTab extends StatefulWidget {
   const ReflectTab({super.key});
@@ -18,7 +18,11 @@ class ReflectTab extends StatefulWidget {
 }
 
 class _ReflectTabState extends State<ReflectTab> {
-  double _moodValue = 5.0; // 1 to 10
+  // --- 2D EMOTION STATE ---
+  // X-Axis = Mood (Valence): 0 (Unpleasant) -> 10 (Pleasant)
+  // Y-Axis = Energy (Arousal): 0 (Low) -> 10 (High)
+  double _moodValue = 5.0;
+  double _energyValue = 5.0;
   
   // --- CONTEXT TAGS ---
   final List<String> _allTags = ["Work", "Study", "Social", "Family", "Romance", "Sleep", "Health", "Finance", "Nature", "Gaming"];
@@ -128,12 +132,24 @@ class _ReflectTabState extends State<ReflectTab> {
         builder: (context) => WritingPage(
           prompt: _currentPrompt,
           moodValue: _moodValue,
-          selectedTags: _selectedTags.toList(),
+          // We pass energy as a specialized tag for now, or you can update WritingPage to accept it directly.
+          // To keep it simple without breaking your WritingPage file, I'll append it to tags.
+          selectedTags: [..._selectedTags, "Energy: ${_energyValue.toStringAsFixed(1)}"], 
           weatherContext: _weatherLabel,
           city: _city,
         ),
       ),
     );
+  }
+
+  // --- HELPER: GET 2D EMOTION LABEL ---
+  String _getEmotionLabel() {
+    if (_energyValue > 6 && _moodValue > 6) return "EXCITED";
+    if (_energyValue > 6 && _moodValue < 4) return "ANXIOUS";
+    if (_energyValue < 4 && _moodValue > 6) return "ZEN";
+    if (_energyValue < 4 && _moodValue < 4) return "DRAINED";
+    if (_moodValue > 4 && _moodValue < 6) return "NEUTRAL";
+    return "REFLECTIVE";
   }
 
   @override
@@ -153,7 +169,7 @@ class _ReflectTabState extends State<ReflectTab> {
                   Text("Reflect", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink)),
                   IconButton(
                     icon: const Icon(Icons.history, color: AppColors.stone),
-                    onPressed: () {}, // Sanctuary Nav (Usually handled by tabs)
+                    onPressed: () {}, 
                   )
                 ],
               ),
@@ -226,7 +242,7 @@ class _ReflectTabState extends State<ReflectTab> {
                     Text(_currentPrompt, style: GoogleFonts.domine(fontSize: 18, color: AppColors.ink)),
                     const SizedBox(height: 20),
                     
-                    // START BUTTON (Inside Card)
+                    // START BUTTON
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -247,7 +263,100 @@ class _ReflectTabState extends State<ReflectTab> {
               
               const SizedBox(height: 30),
 
-              // 2. CONTEXT CHIPS
+              // 2. THE VIBE MAP (Double Axis Slider)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("VIBE MAP", style: GoogleFonts.lato(fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold, color: AppColors.stone)),
+                  Text(_getEmotionLabel(), style: GoogleFonts.lato(fontWeight: FontWeight.bold, color: AppColors.sage)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Center(
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      double size = constraints.maxWidth;
+                      return Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.stone.withOpacity(0.2)),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFFFFF0F0), // Red tint (High Energy, Bad Mood)
+                              Color(0xFFF0FFF4), // Green tint (High Energy, Good Mood)
+                              // Note: Gradients interpolate, so we use 2 corner colors to simulate the field
+                            ],
+                            stops: [0.2, 0.8],
+                          ),
+                          boxShadow: [BoxShadow(color: AppColors.stone.withOpacity(0.05), blurRadius: 10)],
+                        ),
+                        child: Stack(
+                          children: [
+                            // GRID LINES
+                            Center(child: Container(width: 1, height: size, color: AppColors.stone.withOpacity(0.1))),
+                            Center(child: Container(width: size, height: 1, color: AppColors.stone.withOpacity(0.1))),
+                            
+                            // LABELS
+                            Positioned(top: 10, left: 0, right: 0, child: Center(child: Text("High Energy", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone.withOpacity(0.5))))),
+                            Positioned(bottom: 10, left: 0, right: 0, child: Center(child: Text("Low Energy", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone.withOpacity(0.5))))),
+                            Positioned(left: 10, top: 0, bottom: 0, child: Center(child: RotatedBox(quarterTurns: -1, child: Text("Unpleasant", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone.withOpacity(0.5)))))),
+                            Positioned(right: 10, top: 0, bottom: 0, child: Center(child: RotatedBox(quarterTurns: -1, child: Text("Pleasant", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone.withOpacity(0.5)))))),
+
+                            // INTERACTIVE LAYER
+                            GestureDetector(
+                              onPanUpdate: (details) {
+                                setState(() {
+                                  double dx = details.localPosition.dx.clamp(0.0, size);
+                                  double dy = details.localPosition.dy.clamp(0.0, size);
+                                  
+                                  // Map X (0 to size) -> Mood (0 to 10)
+                                  _moodValue = (dx / size) * 10;
+                                  
+                                  // Map Y (0 to size) -> Energy (10 to 0) -> Inverted because Y=0 is top
+                                  _energyValue = 10 - ((dy / size) * 10);
+                                });
+                              },
+                              onTapDown: (details) {
+                                setState(() {
+                                  double dx = details.localPosition.dx.clamp(0.0, size);
+                                  double dy = details.localPosition.dy.clamp(0.0, size);
+                                  _moodValue = (dx / size) * 10;
+                                  _energyValue = 10 - ((dy / size) * 10);
+                                });
+                              },
+                              child: Container(color: Colors.transparent), // Transparent hit-test layer
+                            ),
+
+                            // THE DOT
+                            Positioned(
+                              left: (_moodValue / 10) * size - 15, // -15 to center the 30px dot
+                              top: ((10 - _energyValue) / 10) * size - 15,
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: AppColors.ink,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))],
+                                  border: Border.all(color: Colors.white, width: 3),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 30),
+
+              // 3. CONTEXT CHIPS
               Text("WHAT AFFECTED YOU?", style: GoogleFonts.lato(fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold, color: AppColors.stone)),
               const SizedBox(height: 10),
               SingleChildScrollView(
@@ -284,24 +393,6 @@ class _ReflectTabState extends State<ReflectTab> {
                     );
                   }).toList(),
                 ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // 3. MOOD SLIDER
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("VIBE CHECK", style: GoogleFonts.lato(fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold, color: AppColors.stone)),
-                  Text("${_moodValue.toInt()}/10", style: GoogleFonts.lato(fontWeight: FontWeight.bold, color: AppColors.sage)),
-                ],
-              ),
-              Slider(
-                value: _moodValue,
-                min: 1, max: 10, divisions: 9,
-                activeColor: AppColors.sage,
-                inactiveColor: AppColors.stone.withOpacity(0.2),
-                onChanged: (val) => setState(() => _moodValue = val),
               ),
               const SizedBox(height: 50),
             ],

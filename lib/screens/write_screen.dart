@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart'; // Required for kIsWeb
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
@@ -24,11 +25,39 @@ class _WriteScreenState extends State<WriteScreen> {
   bool _isLoading = false;
   late stt.SpeechToText _speech;
   bool _isListening = false;
+  
+  // --- NEW: MUSIC PROFILE STATE ---
+  String _userMusicProfile = "General Pop"; // Default fallback
+
+  // --- SMART URL DETECTION ---
+  String get _backendUrl {
+    if (kIsWeb) return "http://localhost:8000/analyze";
+    return "http://192.168.1.15:8000/analyze"; // Update with your IP
+  }
 
   @override
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
+    _fetchUserProfile(); // <--- Fetch the artist prefs on load
+  }
+
+  // --- NEW: FETCH ARTIST PREFS ---
+  Future<void> _fetchUserProfile() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists && doc.data()!.containsKey('music_profile')) {
+          setState(() {
+            _userMusicProfile = doc.data()!['music_profile'];
+          });
+          print("✅ Loaded Music Profile: $_userMusicProfile");
+        }
+      } catch (e) {
+        print("Error fetching profile: $e");
+      }
+    }
   }
 
   void _listen() async {
@@ -74,23 +103,33 @@ class _WriteScreenState extends State<WriteScreen> {
       double lon = position?.longitude ?? 0.0;
 
       final response = await http.post(
-        Uri.parse("http://localhost:8000/analyze"),
+        Uri.parse(_backendUrl), // Use the dynamic URL
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({ "text": text, "lat": lat, "lon": lon, "local_time": timeNow }),
+        body: jsonEncode({ 
+          "text": text, 
+          "lat": lat, 
+          "lon": lon, 
+          "local_time": timeNow,
+          "music_profile": _userMusicProfile // <--- SENDING USER TASTE HERE
+        }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        
         await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('entries').add({
-          'text': text,
+          'text': text, // Keep legacy field for safety
+          'content': text, // Ensure consistent naming with other parts of app
           'mood': data['mood'],
           'artist': data['artist'],
           'track_name': data['track_name'],
           'image_url': data['image_url'],
           'timestamp': FieldValue.serverTimestamp(),
-          'weather_context': lat != 0.0 ? "Real Weather" : "No Loc",
+          'weather_context': lat != 0.0 ? "Real Weather" : "No Loc", // In prod, you'd fetch real weather here
           'mood_score': data['score'] ?? 5,
+          'music_profile_used': _userMusicProfile, // Good for debugging
         });
+        
         if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ResultScreen(data: data)));
       }
     } catch (e) {

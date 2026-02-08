@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for database deletion
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../login_screen.dart';
-import '../spotify_auth_screen.dart'; // Import the new screen
+import '../spotify_auth_screen.dart';
 import '../../theme/colors.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -28,6 +29,61 @@ class _ProfileTabState extends State<ProfileTab> {
     setState(() {
       _isSpotifyConnected = prefs.containsKey('spotify_token');
     });
+  }
+
+  // --- NEW: DELETE ACCOUNT FUNCTION ---
+  Future<void> _deleteAccount(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // 1. Confirm Dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.paperBackground,
+        title: Text("Delete Account?", style: GoogleFonts.domine(fontWeight: FontWeight.bold, color: AppColors.clay)),
+        content: Text("This will permanently delete your profile, history, and music data. You cannot undo this.", style: GoogleFonts.lato(color: AppColors.ink)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("CANCEL", style: GoogleFonts.lato(fontWeight: FontWeight.bold, color: AppColors.stone)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text("DELETE", style: GoogleFonts.lato(fontWeight: FontWeight.bold, color: AppColors.clay)),
+          ),
+        ],
+      ),
+    );
+
+    // 2. Execute Deletion
+    if (confirm == true) {
+      try {
+        // Delete User Data from Firestore
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+        
+        // Delete Auth Account
+        await user.delete();
+
+        // Clear Local Data
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        // Redirect to Login
+        if (context.mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (route) => false,
+          );
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account Deleted.")));
+        }
+      } catch (e) {
+        // Firebase requires recent login for deletion
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: Please log out and log in again to delete. ($e)")));
+        }
+      }
+    }
   }
 
   @override
@@ -91,7 +147,6 @@ class _ProfileTabState extends State<ProfileTab> {
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    // Change color based on status
                     color: _isSpotifyConnected ? const Color(0xFF1DB954).withOpacity(0.1) : Colors.black,
                     borderRadius: BorderRadius.circular(16),
                     border: _isSpotifyConnected ? Border.all(color: const Color(0xFF1DB954)) : null,
@@ -140,7 +195,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   onPressed: () async {
                     await FirebaseAuth.instance.signOut();
                     final prefs = await SharedPreferences.getInstance();
-                    await prefs.clear(); // Clear local data on logout
+                    await prefs.clear(); 
                     if (context.mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
                   },
                   icon: const Icon(Icons.logout, size: 20),
@@ -152,6 +207,17 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
                 ),
               ),
+              
+              const SizedBox(height: 15),
+
+              // NEW: DELETE BUTTON
+              Center(
+                child: TextButton(
+                  onPressed: () => _deleteAccount(context),
+                  child: Text("Delete Account", style: GoogleFonts.lato(color: AppColors.stone, fontSize: 12, decoration: TextDecoration.underline)),
+                ),
+              ),
+              
               const SizedBox(height: 20),
             ],
           ),

@@ -43,16 +43,21 @@ class _PatternsTabState extends State<PatternsTab> {
     double totalScore = 0;
     List<FlSpot> graphPoints = [];
     
-    // Chronotype Data
-    List<double> morningScores = [];
-    List<double> eveningScores = [];
+    // Chronotype Data Buckets
+    Map<String, List<double>> timeScores = {
+      "Morning": [],   // 5 - 11
+      "Afternoon": [], // 12 - 16
+      "Evening": [],   // 17 - 21
+      "Night": [],     // 22 - 4
+    };
 
     // Weather Data
     List<double> sunnyScores = [];
     List<double> rainyScores = [];
     
-    // Topic Data
+    // Topic & Tag Data
     Map<String, int> wordCounts = {};
+    Map<String, List<double>> tagScores = {}; // For Impact Analysis
     final stopWords = {'the', 'and', 'i', 'to', 'a', 'of', 'in', 'is', 'it', 'my', 'was', 'for', 'with', 'on'};
 
     // HEATMAP DATA
@@ -67,10 +72,10 @@ class _PatternsTabState extends State<PatternsTab> {
           ? (data['timestamp'] as Timestamp).toDate() 
           : DateTime.now();
           
-      // Heatmap Logic: Store score for date (normalization)
+      // Heatmap Logic: Store score for date
       DateTime dayKey = DateTime(timestamp.year, timestamp.month, timestamp.day);
       if (!dailyScores.containsKey(dayKey)) {
-        dailyScores[dayKey] = score; // Keep latest entry for that day
+        dailyScores[dayKey] = score; 
       }
 
       String content = (data['content'] ?? "").toString().toLowerCase();
@@ -78,18 +83,29 @@ class _PatternsTabState extends State<PatternsTab> {
 
       totalScore += score;
       
-      // Graph Data (X axis = index, Y axis = score)
+      // Graph Data
       graphPoints.add(FlSpot((docs.length - 1 - i).toDouble(), score));
 
-      // Chronotype
-      if (timestamp.hour < 12) morningScores.add(score);
-      else if (timestamp.hour > 17) eveningScores.add(score);
+      // Chronotype Buckets
+      int h = timestamp.hour;
+      if (h >= 5 && h < 12) timeScores["Morning"]!.add(score);
+      else if (h >= 12 && h < 17) timeScores["Afternoon"]!.add(score);
+      else if (h >= 17 && h < 22) timeScores["Evening"]!.add(score);
+      else timeScores["Night"]!.add(score);
 
-      // Weather
+      // Weather Stats
       if (weather.contains('clear') || weather.contains('sun')) sunnyScores.add(score);
       if (weather.contains('rain') || weather.contains('drizzle')) rainyScores.add(score);
 
-      // Topics
+      // Tag Correlations
+      if (data['tags'] != null) {
+        for (String tag in List<String>.from(data['tags'])) {
+          if (tagScores[tag] == null) tagScores[tag] = [];
+          tagScores[tag]!.add(score);
+        }
+      }
+
+      // Word Cloud
       content.split(RegExp(r'\W+')).forEach((word) {
         if (word.length > 3 && !stopWords.contains(word)) {
           wordCounts[word] = (wordCounts[word] ?? 0) + 1;
@@ -97,23 +113,45 @@ class _PatternsTabState extends State<PatternsTab> {
       });
     }
 
-    // Sort graph points by X to ensure line draws correctly
+    // Sort graph points
     graphPoints.sort((a, b) => a.x.compareTo(b.x));
 
+    double globalAvg = totalScore / docs.length;
     double _avg(List<double> l) => l.isEmpty ? 0 : l.reduce((a, b) => a + b) / l.length;
+
+    // --- CALCULATE IMPACT (Correlation) ---
+    List<Map<String, dynamic>> impactList = [];
+    tagScores.forEach((tag, scores) {
+      if (scores.length >= 2) { // Only count tags used at least twice
+        double tagAvg = scores.reduce((a, b) => a + b) / scores.length;
+        impactList.add({
+          "tag": tag,
+          "impact": tagAvg - globalAvg, // Positive = Booster, Negative = Drainer
+          "count": scores.length
+        });
+      }
+    });
+    // Sort by magnitude of impact (positive or negative)
+    impactList.sort((a, b) => b['impact'].abs().compareTo(a['impact'].abs()));
+
+    // --- CALCULATE CHRONOTYPE ---
+    Map<String, String> finalTimeStats = {};
+    timeScores.forEach((key, scores) {
+      finalTimeStats[key] = scores.isEmpty ? "--" : _avg(scores).toStringAsFixed(1);
+    });
 
     var sortedTopics = wordCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     
     return {
-      "avg_score": totalScore / docs.length,
+      "avg_score": globalAvg,
       "graph_data": graphPoints,
-      "morning_avg": _avg(morningScores),
-      "evening_avg": _avg(eveningScores),
+      "time_stats": finalTimeStats,
       "sunny_avg": _avg(sunnyScores),
       "rainy_avg": _avg(rainyScores),
       "top_topics": sortedTopics.take(5).map((e) => e.key).toList(),
-      "heatmap_data": dailyScores, // Added for Grid
+      "heatmap_data": dailyScores,
+      "tag_impacts": impactList.take(5).toList(),
       "count": docs.length
     };
   }
@@ -122,10 +160,8 @@ class _PatternsTabState extends State<PatternsTab> {
   Future<void> _generateWeeklyReport() async {
     setState(() => _isAnalyzing = true);
     final user = FirebaseAuth.instance.currentUser;
-    print("🚀 Starting Analysis...");
-
+    
     try {
-      // A. Get Data from Firebase
       final now = DateTime.now();
       final sevenDaysAgo = now.subtract(const Duration(days: 7));
       
@@ -136,7 +172,6 @@ class _PatternsTabState extends State<PatternsTab> {
 
       if (query.docs.isEmpty) throw Exception("Write at least one entry this week to analyze.");
 
-      // B. Format for Python
       List<Map<String, dynamic>> logs = query.docs.map((doc) {
         final data = doc.data();
         return {
@@ -148,11 +183,9 @@ class _PatternsTabState extends State<PatternsTab> {
         };
       }).toList();
 
-      // C. Get Saved Music Profile
       final prefs = await SharedPreferences.getInstance();
       final musicProfile = prefs.getString('music_profile') ?? "General Pop";
 
-      // D. Call Groq Backend
       final response = await http.post(
         Uri.parse(_backendUrl),
         headers: {"Content-Type": "application/json"},
@@ -175,7 +208,6 @@ class _PatternsTabState extends State<PatternsTab> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("Analysis Failed: $e"),
           backgroundColor: AppColors.clay,
-          duration: const Duration(seconds: 4),
         ));
       }
     } finally {
@@ -213,15 +245,13 @@ class _PatternsTabState extends State<PatternsTab> {
       ),
       body: SafeArea(
         child: StreamBuilder(
-          // INCREASED LIMIT TO 365 FOR YEARLY HEATMAP
           stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).collection('entries')
-            .orderBy('timestamp', descending: true).limit(365).snapshots(),
+            .orderBy('timestamp', descending: true).limit(100).snapshots(),
           builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.sage));
             
             final stats = _calculateStats(snapshot.data!.docs);
             
-            // EMPTY STATE
             if (stats.isEmpty) {
               return Center(
                 child: Column(
@@ -242,16 +272,16 @@ class _PatternsTabState extends State<PatternsTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text("Patterns", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink)),
-                  Text("Your emotional horizon.", style: GoogleFonts.lato(fontSize: 16, color: AppColors.stone)),
+                  Text("The math behind your mind.", style: GoogleFonts.lato(fontSize: 16, color: AppColors.stone)),
                   const SizedBox(height: 30),
 
-                  // --- 1. LIFE GRID HEATMAP (NEW) ---
+                  // 1. LIFE GRID (Consistency Heatmap)
                   Text("CONSISTENCY", style: GoogleFonts.lato(fontSize: 12, letterSpacing: 2, fontWeight: FontWeight.bold, color: AppColors.stone)),
                   const SizedBox(height: 10),
                   _buildLifeGrid(stats['heatmap_data']),
                   const SizedBox(height: 30),
 
-                  // --- 2. EMOTIONAL HORIZON GRAPH ---
+                  // 2. EMOTIONAL HORIZON GRAPH
                   Container(
                     height: 200,
                     padding: const EdgeInsets.all(20),
@@ -281,38 +311,55 @@ class _PatternsTabState extends State<PatternsTab> {
                   ),
                   const SizedBox(height: 30),
 
-                  // --- 3. INFOGRAPHICS ROW ---
+                  // 3. ACTIVITY IMPACT (Tag Correlations)
+                  Text("ACTIVITY IMPACT", style: GoogleFonts.lato(fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold, color: AppColors.stone)),
+                  Text("What lifts you up vs. weighs you down.", style: GoogleFonts.lato(fontSize: 12, color: AppColors.stone.withOpacity(0.7))),
+                  const SizedBox(height: 15),
+                  _buildImpactChart(stats['tag_impacts']),
+                  const SizedBox(height: 30),
+
+                  // 4. CHRONOTYPE (Time Analysis)
+                  Text("CHRONOTYPE", style: GoogleFonts.lato(fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold, color: AppColors.stone)),
+                  const SizedBox(height: 15),
+                  _buildChronotypeRow(stats['time_stats']),
+                  const SizedBox(height: 30),
+
+                  // 5. WEATHER & TOPIC STATS
                   Row(
                     children: [
-                      _InfoCard(
-                        icon: FontAwesomeIcons.cloudSun,
-                        label: "Best Time",
-                        value: (stats['morning_avg'] > stats['evening_avg']) ? "Morning" : "Evening",
-                        subValue: "${(stats['morning_avg'] > stats['evening_avg'] ? stats['morning_avg'] : stats['evening_avg']).toStringAsFixed(1)} avg",
-                      ),
-                      const SizedBox(width: 16),
                       _InfoCard(
                         icon: FontAwesomeIcons.umbrella,
                         label: "Rain Effect",
                         value: (stats['rainy_avg'] > 0) ? stats['rainy_avg'].toStringAsFixed(1) : "--",
                         subValue: "vs Sun ${stats['sunny_avg'].toStringAsFixed(1)}",
                       ),
+                      const SizedBox(width: 16),
+                      // Topic Cloud Small
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.stone.withOpacity(0.1)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(FontAwesomeIcons.commentDots, size: 20, color: AppColors.sage),
+                              const SizedBox(height: 10),
+                              Text("Top Topic", style: GoogleFonts.lato(fontSize: 12, color: AppColors.stone)),
+                              const SizedBox(height: 4),
+                              Text(
+                                (stats['top_topics'] as List).isNotEmpty ? (stats['top_topics'][0] as String).toUpperCase() : "--", 
+                                style: GoogleFonts.domine(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.ink)
+                              ),
+                              Text("Recurring theme", style: GoogleFonts.lato(fontSize: 12, color: AppColors.stone)),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // --- 4. TOPIC CLOUD ---
-                  Text("ON YOUR MIND", style: GoogleFonts.lato(fontSize: 12, letterSpacing: 2, fontWeight: FontWeight.bold, color: AppColors.stone)),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10, runSpacing: 10,
-                    children: (stats['top_topics'] as List<String>).map((topic) {
-                      return Chip(
-                        label: Text(topic.toUpperCase(), style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.ink)),
-                        backgroundColor: AppColors.sage.withOpacity(0.1),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.sage.withOpacity(0.3))),
-                      );
-                    }).toList(),
                   ),
 
                   const SizedBox(height: 120), // Space for FAB
@@ -325,43 +372,116 @@ class _PatternsTabState extends State<PatternsTab> {
     );
   }
 
-  // --- WIDGET: LIFE GRID BUILDER ---
+  // --- WIDGET: LIFE GRID ---
   Widget _buildLifeGrid(Map<DateTime, double> data) {
-    // Show last ~5 months (140 days)
     final now = DateTime.now();
-    
     return SizedBox(
-      height: 140, // Height for 7 rows (7 days)
+      height: 140, // 7 rows
       child: GridView.builder(
         scrollDirection: Axis.horizontal,
-        reverse: true, // Start from right (Today) and scroll left (Past)
+        reverse: true,
         physics: const BouncingScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 7, // 7 rows (Days of Week)
-          mainAxisSpacing: 4,
-          crossAxisSpacing: 4,
-          childAspectRatio: 1.0,
+          crossAxisCount: 7, 
+          mainAxisSpacing: 4, crossAxisSpacing: 4, childAspectRatio: 1.0,
         ),
-        itemCount: 140, // Number of days to show
+        itemCount: 140,
         itemBuilder: (context, index) {
-          // Calculate date backwards
           final date = now.subtract(Duration(days: index));
           final dayKey = DateTime(date.year, date.month, date.day);
           final score = data[dayKey];
           
-          Color color = AppColors.stone.withOpacity(0.1); // Default Empty
-          if (score != null) {
-            color = _getMoodColor(score);
-          }
+          Color color = AppColors.stone.withOpacity(0.1); 
+          if (score != null) color = _getMoodColor(score);
 
-          return Container(
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          );
+          return Container(decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)));
         },
       ),
+    );
+  }
+
+  // --- WIDGET: IMPACT CHART ---
+  Widget _buildImpactChart(List<Map<String, dynamic>> impacts) {
+    if (impacts.isEmpty) return const Text("Use tags to see what affects your mood.", style: TextStyle(color: AppColors.stone));
+
+    return Column(
+      children: impacts.map((item) {
+        double val = item['impact'];
+        bool isPositive = val >= 0;
+        double widthFactor = (val.abs() / 5).clamp(0.0, 1.0); // Normalize width
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: Row(
+            children: [
+              SizedBox(width: 70, child: Text(item['tag'], style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.ink), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(width: 1, height: 20, color: AppColors.stone.withOpacity(0.2)), // Center Line
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: !isPositive 
+                              ? Container(height: 8, width: 100 * widthFactor, decoration: BoxDecoration(color: AppColors.clay, borderRadius: BorderRadius.circular(4))) 
+                              : const SizedBox(),
+                          ),
+                        ),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: isPositive 
+                              ? Container(height: 8, width: 100 * widthFactor, decoration: BoxDecoration(color: AppColors.sage, borderRadius: BorderRadius.circular(4))) 
+                              : const SizedBox(),
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 40,
+                child: Text("${val > 0 ? '+' : ''}${val.toStringAsFixed(1)}", textAlign: TextAlign.right, style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: isPositive ? AppColors.sage : AppColors.clay)),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // --- WIDGET: CHRONOTYPE ROW ---
+  Widget _buildChronotypeRow(Map<String, String> stats) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _chronoCard("Morning", Icons.wb_sunny_outlined, stats["Morning"]!),
+        _chronoCard("Afternoon", Icons.wb_sunny, stats["Afternoon"]!),
+        _chronoCard("Evening", Icons.nights_stay_outlined, stats["Evening"]!),
+        _chronoCard("Night", Icons.bed_outlined, stats["Night"]!),
+      ],
+    );
+  }
+
+  Widget _chronoCard(String label, IconData icon, String score) {
+    double val = double.tryParse(score) ?? 0;
+    Color color = val == 0 ? AppColors.stone : _getMoodColor(val);
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: AppColors.stone.withOpacity(0.1))),
+          child: Icon(icon, size: 20, color: AppColors.stone),
+        ),
+        const SizedBox(height: 8),
+        Text(score, style: GoogleFonts.domine(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+      ],
     );
   }
 }
@@ -381,11 +501,7 @@ class _InfoCard extends StatelessWidget {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.stone.withOpacity(0.1)),
-        ),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.stone.withOpacity(0.1))),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -410,10 +526,7 @@ class _ReportSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
-        color: AppColors.paperBackground,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-      ),
+      decoration: const BoxDecoration(color: AppColors.paperBackground, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
       child: Column(
         children: [
           const SizedBox(height: 10),
@@ -425,10 +538,7 @@ class _ReportSheet extends StatelessWidget {
               children: [
                 Text("AI INSIGHT", style: GoogleFonts.lato(fontSize: 12, letterSpacing: 2, fontWeight: FontWeight.bold, color: AppColors.stone)),
                 const SizedBox(height: 10),
-                Text(
-                  data['mood_summary']?.toString().toUpperCase() ?? "ANALYZED",
-                  style: GoogleFonts.domine(fontSize: 36, fontWeight: FontWeight.bold, color: AppColors.ink),
-                ),
+                Text(data['mood_summary']?.toString().toUpperCase() ?? "ANALYZED", style: GoogleFonts.domine(fontSize: 36, fontWeight: FontWeight.bold, color: AppColors.ink)),
                 const SizedBox(height: 20),
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -447,10 +557,7 @@ class _ReportSheet extends StatelessWidget {
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF1DB954), Color(0xFF191414)]), 
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1DB954), Color(0xFF191414)]), borderRadius: BorderRadius.circular(16)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

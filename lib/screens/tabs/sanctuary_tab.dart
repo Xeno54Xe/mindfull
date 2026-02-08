@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -25,6 +26,22 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
     if (score >= 8) return AppColors.sage; // Radiant
     if (score >= 5) return const Color(0xFFA8A593); // Neutral (Olive/Stone)
     return AppColors.clay; // Heavy
+  }
+
+  // --- HELPER: GROUP ENTRIES BY MONTH ---
+  Map<String, List<QueryDocumentSnapshot>> _groupEntriesByMonth(List<QueryDocumentSnapshot> docs) {
+    Map<String, List<QueryDocumentSnapshot>> groups = {};
+    for (var doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['timestamp'] == null) continue;
+      
+      DateTime date = (data['timestamp'] as Timestamp).toDate();
+      String key = DateFormat('MMMM yyyy').format(date);
+      
+      if (groups[key] == null) groups[key] = [];
+      groups[key]!.add(doc);
+    }
+    return groups;
   }
 
   @override
@@ -116,8 +133,13 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
     );
   }
 
-  // --- VIEW 1: MOOD CALENDAR ---
+  // --- VIEW 1: MOOD CALENDAR + FOREST ---
   Widget _buildCalendarView(Map<DateTime, List<QueryDocumentSnapshot>> events) {
+    // Flatten events to get all docs for the trees
+    List<QueryDocumentSnapshot> allDocs = events.values.expand((x) => x).toList();
+    final monthlyGroups = _groupEntriesByMonth(allDocs);
+    final monthKeys = monthlyGroups.keys.toList(); // e.g. ["Feb 2026", "Jan 2026"]
+
     return Column(
       children: [
         TableCalendar(
@@ -151,7 +173,6 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
             outsideDaysVisible: false,
           ),
           
-          // --- DOT BUILDER ---
           calendarBuilders: CalendarBuilders(
             markerBuilder: (context, date, docList) {
               if (docList.isEmpty) return null;
@@ -190,14 +211,107 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
           },
         ),
         
-        const Spacer(),
+        const SizedBox(height: 10),
+        Divider(color: AppColors.stone.withOpacity(0.2), indent: 24, endIndent: 24),
+        
+        // --- THE MOOD FOREST ---
+        Expanded(
+          child: monthlyGroups.isEmpty 
+            ? Center(child: Text("Start planting memories.", style: GoogleFonts.lato(color: AppColors.stone)))
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // 1. THE LEGEND (Left Space)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 24, bottom: 40, right: 10),
+                    child: _buildForestLegend(),
+                  ),
+
+                  // 2. THE TREES (Scrollable from Right)
+                  Expanded(
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      // We only pad the right side because the Legend handles the left padding
+                      padding: const EdgeInsets.only(right: 24, bottom: 10),
+                      reverse: true, // Newest months on the right
+                      itemCount: monthKeys.length,
+                      itemBuilder: (context, index) {
+                        String monthName = monthKeys[index];
+                        List<QueryDocumentSnapshot> monthEntries = monthlyGroups[monthName]!;
+                        return _buildTreeCard(monthName, monthEntries);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+        ),
+
         Center(child: Text("Tap a date to recall.", style: GoogleFonts.lato(color: AppColors.stone.withOpacity(0.5)))),
-        const SizedBox(height: 40),
+        const SizedBox(height: 20),
       ],
     );
   }
 
-  // --- VIEW 2: LIST SCROLL ---
+  // --- THE NEW LEGEND WIDGET ---
+  Widget _buildForestLegend() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("FOREST GUIDE", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: AppColors.stone)),
+        const SizedBox(height: 15),
+        
+        // Size Explanation
+        Row(
+          children: [
+            const Icon(Icons.arrow_upward, size: 14, color: AppColors.ink),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("SIZE", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.ink)),
+                Text("Consistency", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Green Color Explanation
+        Row(
+          children: [
+            const Icon(Icons.circle, size: 12, color: AppColors.sage),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("GREEN", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.ink)),
+                Text("Radiant Days", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Brown Color Explanation
+        Row(
+          children: [
+             Icon(Icons.circle, size: 12, color: AppColors.clay),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("RED/BROWN", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.ink)),
+                Text("Heavy Days", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // --- VIEW 2: LIST SCROLL (UNCHANGED) ---
   Widget _buildListView(List<QueryDocumentSnapshot> docs) {
     if (docs.isEmpty) return Center(child: Text("No stories yet.", style: GoogleFonts.domine(color: AppColors.stone)));
     
@@ -210,11 +324,47 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
     );
   }
 
+  // --- TREE CARD WIDGET ---
+  Widget _buildTreeCard(String monthName, List<QueryDocumentSnapshot> entries) {
+    int count = entries.length;
+    // Growth Stage: 0.2 (1 entry) -> 1.0 (15+ entries)
+    double growthStage = (count / 15).clamp(0.2, 1.0);
+    
+    // Leaf Colors based on Mood
+    List<Color> leafColors = entries.map((e) {
+      final data = e.data() as Map<String, dynamic>;
+      return _getMoodColor((data['mood_score'] ?? 5.0).toDouble());
+    }).toList();
+
+    return Container(
+      width: 180, // INCREASED WIDTH (Was 140)
+      margin: const EdgeInsets.only(left: 10), // Spacing between trees
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Expanded(
+            child: CustomPaint(
+              size: const Size(180, 260), // INCREASED SIZE (Was 140x200)
+              painter: TreePainter(
+                growth: growthStage, 
+                colors: leafColors,
+                seed: monthName.hashCode, 
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(monthName.toUpperCase(), style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1, color: AppColors.ink)),
+          Text("$count Memories", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+        ],
+      ),
+    );
+  }
+
   void _showDayDetails(BuildContext context, List<QueryDocumentSnapshot> dailyDocs) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true, // Allow full height for list
+      isScrollControlled: true,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.6,
         decoration: const BoxDecoration(
@@ -279,7 +429,6 @@ class _EntryCard extends StatelessWidget {
   final QueryDocumentSnapshot doc;
   const _EntryCard({required this.doc});
 
-  // --- SHOW FULL MEMORY POPUP ---
   void _showFullMemory(BuildContext context, Map<String, dynamic> data) {
     DateTime date = (data['timestamp'] as Timestamp).toDate();
     double score = (data['mood_score'] ?? 5.0).toDouble();
@@ -287,7 +436,7 @@ class _EntryCard extends StatelessWidget {
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Full screen capable
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.85,
@@ -306,7 +455,6 @@ class _EntryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // DATE & LOCATION HEADER
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -317,7 +465,6 @@ class _EntryCard extends StatelessWidget {
                             Text(DateFormat('MMMM d').format(date), style: GoogleFonts.domine(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.ink)),
                           ],
                         ),
-                        // WEATHER BADGE
                         if (data['weather_context'] != null)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -334,7 +481,6 @@ class _EntryCard extends StatelessWidget {
                     ),
                     
                     const SizedBox(height: 10),
-                    // CITY & TIME
                     Row(
                       children: [
                         const Icon(Icons.location_on, size: 14, color: AppColors.sage),
@@ -349,7 +495,6 @@ class _EntryCard extends StatelessWidget {
                     const Divider(color: Color(0xFFEEEBE0)),
                     const SizedBox(height: 20),
 
-                    // PROMPT (If exists)
                     if (data['prompt_used'] != null) ...[
                       Text("THINKING ABOUT", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: AppColors.sage)),
                       const SizedBox(height: 5),
@@ -357,7 +502,6 @@ class _EntryCard extends StatelessWidget {
                       const SizedBox(height: 20),
                     ],
 
-                    // TAGS
                     if (data['tags'] != null && (data['tags'] as List).isNotEmpty) ...[
                       Wrap(
                         spacing: 8,
@@ -371,7 +515,6 @@ class _EntryCard extends StatelessWidget {
                       const SizedBox(height: 20),
                     ],
 
-                    // MAIN CONTENT
                     Text(
                       data['content'] ?? "", 
                       style: GoogleFonts.lato(fontSize: 16, height: 1.8, color: AppColors.ink)
@@ -379,7 +522,6 @@ class _EntryCard extends StatelessWidget {
 
                     const SizedBox(height: 30),
 
-                    // SONG CARD (Detailed)
                     if (data['track_name'] != null)
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -471,7 +613,6 @@ class _EntryCard extends StatelessWidget {
     Color moodColor = score >= 8 ? AppColors.sage : (score >= 5 ? const Color(0xFFA8A593) : AppColors.clay);
 
     return GestureDetector(
-      // --- HERE IS THE ON TAP ACTION ---
       onTap: () => _showFullMemory(context, data),
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
@@ -486,7 +627,6 @@ class _EntryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // HEADER ROW
               Row(
                 children: [
                   Text(DateFormat('MMM d • h:mm a').format(date), style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.stone)),
@@ -508,7 +648,6 @@ class _EntryCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               
-              // CONTENT PREVIEW
               Text(data['content'] ?? "", maxLines: 3, overflow: TextOverflow.ellipsis, style: GoogleFonts.lato(fontSize: 14, height: 1.5, color: AppColors.ink)),
               
               if (data['track_name'] != null) ...[
@@ -529,4 +668,76 @@ class _EntryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// --- THE PROCEDURAL TREE PAINTER ---
+class TreePainter extends CustomPainter {
+  final double growth; 
+  final List<Color> colors;
+  final int seed; 
+
+  TreePainter({required this.growth, required this.colors, required this.seed});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rng = Random(seed);
+    final paint = Paint()
+      ..color = const Color(0xFF5D4037)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4 * growth
+      ..strokeCap = StrokeCap.round;
+
+    final leafPaint = Paint()..style = PaintingStyle.fill;
+
+    Offset start = Offset(size.width / 2, size.height);
+    
+    // Trunk
+    double trunkHeight = size.height * 0.6 * growth;
+    Offset end = start - Offset(0, trunkHeight);
+    
+    Path trunk = Path();
+    trunk.moveTo(start.dx, start.dy);
+    trunk.quadraticBezierTo(
+      start.dx + (rng.nextDouble() - 0.5) * 20, 
+      start.dy - trunkHeight / 2, 
+      end.dx, 
+      end.dy
+    );
+    canvas.drawPath(trunk, paint);
+
+    if (growth > 0.3) {
+      _drawBranch(canvas, end, -pi / 2, trunkHeight * 0.7, 1, rng, paint, leafPaint);
+    }
+  }
+
+  void _drawBranch(Canvas canvas, Offset start, double angle, double length, int depth, Random rng, Paint barkPaint, Paint leafPaint) {
+    if (depth > 4 || length < 5) return; 
+
+    double deviation = (rng.nextDouble() - 0.5) * 0.5;
+    double newAngle = angle + deviation;
+
+    Offset end = start + Offset(cos(newAngle) * length, sin(newAngle) * length);
+
+    double currentStroke = max(0.5, barkPaint.strokeWidth! * 0.7);
+    Paint currentBarkPaint = Paint()
+      ..color = barkPaint.color
+      ..style = barkPaint.style
+      ..strokeCap = barkPaint.strokeCap
+      ..strokeWidth = currentStroke;
+
+    canvas.drawLine(start, end, currentBarkPaint);
+
+    if (depth > 2) {
+      if (colors.isNotEmpty) {
+        leafPaint.color = colors[rng.nextInt(colors.length)].withOpacity(0.8);
+        canvas.drawCircle(end, 3 + rng.nextDouble() * 4, leafPaint);
+      }
+    }
+
+    _drawBranch(canvas, end, newAngle - 0.3, length * 0.7, depth + 1, rng, currentBarkPaint, leafPaint);
+    _drawBranch(canvas, end, newAngle + 0.3, length * 0.7, depth + 1, rng, currentBarkPaint, leafPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

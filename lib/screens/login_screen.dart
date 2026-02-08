@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart'; // REQUIRED IMPORT
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../theme/colors.dart';
-import 'main_screen.dart';
+// Note: No need to import MainScreen, AuthGate handles it.
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,14 +19,87 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false; 
 
+  // --- EMAIL SUBMIT ---
+  Future<void> _submit() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) return;
+    
+    setState(() => _isLoading = true);
+    final auth = FirebaseAuth.instance;
+
+    try {
+      if (isSignUp) {
+        // --- SIGN UP ---
+        UserCredential cred = await auth.createUserWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+        
+        // Send Verification Email
+        await cred.user?.sendEmailVerification();
+        
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Account created! Verification link sent to email."),
+            backgroundColor: AppColors.sage,
+          ));
+          // Switch to login mode so they can sign in after verifying
+          setState(() => isSignUp = false);
+        }
+      } else {
+        // --- SIGN IN ---
+        await auth.signInWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+        // AuthGate will automatically detect the login and move you.
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message ?? "Authentication Error"),
+          backgroundColor: AppColors.clay,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- GOOGLE SIGN IN (FIXED) ---
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      GoogleAuthProvider googleProvider = GoogleAuthProvider();
-      await FirebaseAuth.instance.signInWithPopup(googleProvider);
-      if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainScreen()));
+      // 1. Trigger the authentication flow
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      
+      if (googleUser == null) {
+        // User canceled the sign-in
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // 2. Obtain the auth details from the request
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // 3. Create a new credential
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // 4. Sign in to Firebase with the Google Credential
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Failed: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Google Sign-In Failed: $e"),
+            backgroundColor: AppColors.clay,
+          ),
+        );
+      }
+      print("Google Auth Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -48,58 +122,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(height: 30),
-              
-              Text(
-                isSignUp ? "Begin Journal." : "Welcome Back.",
-                style: GoogleFonts.domine(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.ink),
-              ),
+              Text(isSignUp ? "Begin Journal." : "Welcome Back.", style: GoogleFonts.domine(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.ink)),
               const SizedBox(height: 12),
-              Text(
-                isSignUp ? "A safe space for your mind." : "Resume your story.",
-                style: GoogleFonts.lato(fontSize: 18, color: AppColors.stone), 
-              ),
+              Text(isSignUp ? "A safe space for your mind." : "Resume your story.", style: GoogleFonts.lato(fontSize: 18, color: AppColors.stone)),
               const SizedBox(height: 50),
               
-              _SocialButton(
-                text: "Continue with Google",
-                icon: FontAwesomeIcons.google,
-                bgColor: const Color(0xFFDB4437), // Muted Google Red
-                onTap: _signInWithGoogle, 
-              ),
-              const SizedBox(height: 16),
-              _SocialButton(
-                text: "Continue with Spotify",
-                icon: FontAwesomeIcons.spotify,
-                bgColor: const Color(0xFF1DB954), // Spotify Green
-                onTap: () {},
-              ),
-              
+              // SOCIAL BUTTONS
+               _SocialButton(text: "Continue with Google", icon: FontAwesomeIcons.google, bgColor: const Color(0xFFDB4437), onTap: _signInWithGoogle),
               const SizedBox(height: 30),
-              const Row(children: [
-                Expanded(child: Divider(color: AppColors.stone, thickness: 0.5)), 
-                Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text("OR", style: TextStyle(color: AppColors.stone, fontWeight: FontWeight.bold))), 
-                Expanded(child: Divider(color: AppColors.stone, thickness: 0.5))
-              ]),
+              const Row(children: [Expanded(child: Divider(color: AppColors.stone, thickness: 0.5)), Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text("OR", style: TextStyle(color: AppColors.stone, fontWeight: FontWeight.bold))), Expanded(child: Divider(color: AppColors.stone, thickness: 0.5))]),
               const SizedBox(height: 30),
 
-              // LIGHT THEME INPUTS
+              // INPUTS
               _LightInput(controller: _emailController, label: "Email", icon: Icons.email_outlined),
               const SizedBox(height: 20),
               _LightInput(controller: _passwordController, label: "Password", icon: Icons.lock_outline, isPassword: true),
               
               const SizedBox(height: 40),
               
+              // THE MAIN BUTTON
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.sage, // Pastel Green Button
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 2,
-                  ),
+                  onPressed: _submit, 
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.sage, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 2),
                   child: Text(isSignUp ? "Create Account" : "Sign In", style: GoogleFonts.lato(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -109,11 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: GestureDetector(
                   onTap: () => setState(() => isSignUp = !isSignUp),
                   child: RichText(
-                    text: TextSpan(
-                      text: isSignUp ? "Already a member? " : "New here? ",
-                      style: const TextStyle(color: AppColors.stone),
-                      children: [TextSpan(text: isSignUp ? "Sign In" : "Join Now", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.sage))],
-                    ),
+                    text: TextSpan(text: isSignUp ? "Already a member? " : "New here? ", style: const TextStyle(color: AppColors.stone), children: [TextSpan(text: isSignUp ? "Sign In" : "Join Now", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.sage))]),
                   ),
                 ),
               ),
@@ -125,6 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+// ... (Keep the _LightInput and _SocialButton classes from your original file)
 class _LightInput extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -145,7 +188,7 @@ class _LightInput extends StatelessWidget {
         labelStyle: const TextStyle(color: AppColors.stone), 
         prefixIcon: Icon(icon, color: AppColors.stone),
         filled: true,
-        fillColor: AppColors.cardColor, // White/Cream Box
+        fillColor: AppColors.cardColor,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.stone.withOpacity(0.1))),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.sage, width: 2)),
@@ -165,14 +208,7 @@ class _SocialButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(12)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center, 
-          children: [
-            Icon(icon, color: Colors.white, size: 20), 
-            const SizedBox(width: 12), 
-            Text(text, style: GoogleFonts.lato(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white))
-          ]
-        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: Colors.white, size: 20), const SizedBox(width: 12), Text(text, style: GoogleFonts.lato(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white))]),
       ),
     );
   }
