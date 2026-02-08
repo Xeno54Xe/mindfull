@@ -36,8 +36,11 @@ class _WritingPageState extends State<WritingPage> {
 
   // --- SMART URL DETECTION ---
   String get _backendUrl {
-    if (kIsWeb) return "http://localhost:8000/analyze";
-    return "http://10.0.2.2:8000/analyze";
+    // REPLACE THIS STRING with your actual Render URL
+    const String liveUrl = "https://mindfull-backend-15b6.onrender.com"; 
+    
+    if (kIsWeb) return liveUrl; 
+    return liveUrl; // Always use live URL for the APK
   }
 
   Future<void> _saveEntry() async {

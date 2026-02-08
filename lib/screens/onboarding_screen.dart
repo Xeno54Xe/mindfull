@@ -33,8 +33,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // --- BACKEND URL ---
   String get _backendUrl {
-    if (kIsWeb) return "http://localhost:8000";
-    return "http://192.168.1.15:8000"; // REPLACE WITH YOUR IP
+    // REPLACE THIS STRING with your actual Render URL
+    const String liveUrl = "https://mindfull-backend-15b6.onrender.com"; 
+    
+    if (kIsWeb) return liveUrl; 
+    return liveUrl; // Always use live URL for the APK
   }
 
   @override

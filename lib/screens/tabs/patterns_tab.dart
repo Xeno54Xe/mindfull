@@ -25,8 +25,11 @@ class _PatternsTabState extends State<PatternsTab> {
   
   // --- SMART URL DETECTION ---
   String get _backendUrl {
-    if (kIsWeb) return "http://localhost:8000/analyze-mood-music";
-    return "http://192.168.1.15:8000/analyze-mood-music"; // Update with your IP
+    // REPLACE THIS STRING with your actual Render URL
+    const String liveUrl = "https://mindfull-backend-15b6.onrender.com"; 
+    
+    if (kIsWeb) return liveUrl; 
+    return liveUrl; // Always use live URL for the APK
   }
 
   // --- HELPER: GET MOOD COLOR ---

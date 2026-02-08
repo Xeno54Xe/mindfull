@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1069402233046",
+    "project_id": "mindfull-app-68b82",
+    "storage_bucket": "mindfull-app-68b82.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1069402233046:android:8558555b1d57e92cee9177",
+        "android_client_info": {
+          "package_name": "com.example.mindfull"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1069402233046-cf4052vo7esbfahck94ru4sgh15kfkal.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDHzTXyEam1NP4biLsAMSDft1pxBb0BdoU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1069402233046-cf4052vo7esbfahck94ru4sgh15kfkal.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
