@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // IMPORT THIS
 import 'firebase_options.dart'; 
-import 'services/auth_gate.dart'; // <--- IMPORT THIS
+import 'services/auth_gate.dart';
+import 'screens/landing_screen.dart'; // IMPORT THIS
 import 'theme/colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MindFullApp());
+
+  // --- CHECK IF USER HAS SEEN INTRO ---
+  final prefs = await SharedPreferences.getInstance();
+  final bool hasSeenIntro = prefs.getBool('hasSeenIntro') ?? false;
+
+  runApp(MindFullApp(startScreen: hasSeenIntro ? const AuthGate() : const LandingScreen()));
 }
 
 class MindFullApp extends StatelessWidget {
-  const MindFullApp({super.key});
+  final Widget startScreen; // Receive the decision
+  
+  const MindFullApp({super.key, required this.startScreen});
 
   @override
   Widget build(BuildContext context) {
@@ -27,8 +37,8 @@ class MindFullApp extends StatelessWidget {
         textTheme: GoogleFonts.latoTextTheme(),
         useMaterial3: true,
       ),
-      // THE GATEKEEPER - This handles Login -> Onboarding -> MainScreen flow
-      home: const AuthGate(), 
+      // Use the decision we made in main()
+      home: startScreen, 
     );
   }
 }

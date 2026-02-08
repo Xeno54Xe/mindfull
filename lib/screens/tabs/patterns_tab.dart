@@ -230,19 +230,7 @@ class _PatternsTabState extends State<PatternsTab> {
 
     return Scaffold(
       backgroundColor: AppColors.paperBackground,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 90.0),
-        child: FloatingActionButton.extended(
-          onPressed: _isAnalyzing ? null : _generateWeeklyReport,
-          backgroundColor: AppColors.ink,
-          elevation: 5,
-          icon: _isAnalyzing 
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-            : const Icon(FontAwesomeIcons.wandMagicSparkles, color: Colors.white, size: 18),
-          label: Text(_isAnalyzing ? "THINKING..." : "ANALYZE WEEK", style: GoogleFonts.lato(fontWeight: FontWeight.bold, letterSpacing: 1, color: Colors.white)),
-        ),
-      ),
+      // REMOVED FLOATING ACTION BUTTON TO PREVENT OVERLAP
       body: SafeArea(
         child: StreamBuilder(
           stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).collection('entries')
@@ -273,6 +261,29 @@ class _PatternsTabState extends State<PatternsTab> {
                 children: [
                   Text("Patterns", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink)),
                   Text("The math behind your mind.", style: GoogleFonts.lato(fontSize: 16, color: AppColors.stone)),
+                  
+                  const SizedBox(height: 20),
+
+                  // --- NEW LOCATION: INLINE BUTTON ---
+                  // This puts the button inside the scrollable area, safe from overlaps
+                  Center(
+                    child: ElevatedButton.icon(
+                      onPressed: _isAnalyzing ? null : _generateWeeklyReport,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.ink,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        elevation: 4,
+                        shadowColor: AppColors.ink.withOpacity(0.4),
+                      ),
+                      icon: _isAnalyzing 
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                        : const Icon(FontAwesomeIcons.wandMagicSparkles, size: 16),
+                      label: Text(_isAnalyzing ? "THINKING..." : "ANALYZE WEEK", style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                    ),
+                  ),
+
                   const SizedBox(height: 30),
 
                   // 1. LIFE GRID (Consistency Heatmap)
@@ -362,7 +373,7 @@ class _PatternsTabState extends State<PatternsTab> {
                     ],
                   ),
 
-                  const SizedBox(height: 120), // Space for FAB
+                  const SizedBox(height: 80), 
                 ],
               ),
             );

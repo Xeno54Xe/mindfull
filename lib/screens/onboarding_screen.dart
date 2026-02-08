@@ -154,7 +154,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   _buildSimplePage(
                     "One last thing.",
                     "Name your sanctuary.",
-                    "e.g., The Vansh Chronicles",
+                    "e.g., CoCo the Diary",
                     _diaryController,
                     Icons.book_outlined,
                   ),
@@ -185,7 +185,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: _isSaving 
                     ? const CircularProgressIndicator(color: Colors.white)
                     : Text(
-                        _currentPage == 2 ? "ENTER SANCTUARY" : "NEXT", 
+                        _currentPage == 2 ? "ENTER YOUR SANCTUARY" : "NEXT", 
                         style: GoogleFonts.lato(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)
                       ),
                 ),
@@ -231,9 +231,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 20),
-          Text("SET THE VIBE", style: GoogleFonts.lato(color: AppColors.sage, letterSpacing: 2, fontWeight: FontWeight.bold)),
+          Text("SECONDLY SET THE VIBE", style: GoogleFonts.lato(color: AppColors.sage, letterSpacing: 2, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          Text("Pick up to 5 artists.", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink)),
+          Text("Pick up to 5 artists. (we'll recommend you based on these)", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink)),
           
           const SizedBox(height: 20),
           

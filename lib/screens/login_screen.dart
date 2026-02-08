@@ -3,9 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // 1. Import dotenv
+import '../services/auth_gate.dart'; 
 import '../theme/colors.dart';
-
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -29,15 +28,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       if (isSignUp) {
-        // --- SIGN UP ---
         UserCredential cred = await auth.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        
-        // Send Verification Email
         await cred.user?.sendEmailVerification();
-        
         if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text("Account created! Verification link sent to email."),
@@ -46,11 +41,15 @@ class _LoginScreenState extends State<LoginScreen> {
           setState(() => isSignUp = false);
         }
       } else {
-        // --- SIGN IN ---
         await auth.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const AuthGate()),
+          );
+        }
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
@@ -64,19 +63,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- GOOGLE SIGN IN (USING .ENV) ---
+  // --- GOOGLE SIGN IN (HARDCODED FIX) ---
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      // 2. Load the Client ID from the .env file
-      // This is the Flutter equivalent of os.getenv("GOOGLE_WEB_CLIENT_ID")
-      final String? clientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
+      // 1. HARDCODED CLIENT ID (This bypasses the .env error completely)
+      const String clientId = "1069402233046-cf4052vo7esbfahck94ru4sgh15kfkal.apps.googleusercontent.com";
 
-      if (clientId == null) {
-        print("⚠️ Warning: GOOGLE_WEB_CLIENT_ID is missing in .env file");
-      }
-
-      // 3. Pass it to the GoogleSignIn constructor
       final GoogleSignIn googleSignIn = GoogleSignIn(
         clientId: clientId, 
       );
@@ -85,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
       
       if (googleUser == null) {
         setState(() => _isLoading = false);
-        return;
+        return; // User canceled the popup
       }
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
@@ -96,6 +89,13 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       await FirebaseAuth.instance.signInWithCredential(credential);
+      
+      // FORCE NAVIGATION TO AUTH GATE
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const AuthGate()),
+        );
+      }
       
     } catch (e) {
       if (mounted) {
@@ -136,20 +136,17 @@ class _LoginScreenState extends State<LoginScreen> {
               Text(isSignUp ? "A safe space for your mind." : "Resume your story.", style: GoogleFonts.lato(fontSize: 18, color: AppColors.stone)),
               const SizedBox(height: 50),
               
-              // SOCIAL BUTTONS
-               _SocialButton(text: "Continue with Google", icon: FontAwesomeIcons.google, bgColor: const Color(0xFFDB4437), onTap: _signInWithGoogle),
+              _SocialButton(text: "Continue with Google", icon: FontAwesomeIcons.google, bgColor: const Color(0xFFDB4437), onTap: _signInWithGoogle),
               const SizedBox(height: 30),
               const Row(children: [Expanded(child: Divider(color: AppColors.stone, thickness: 0.5)), Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text("OR", style: TextStyle(color: AppColors.stone, fontWeight: FontWeight.bold))), Expanded(child: Divider(color: AppColors.stone, thickness: 0.5))]),
               const SizedBox(height: 30),
 
-              // INPUTS
               _LightInput(controller: _emailController, label: "Email", icon: Icons.email_outlined),
               const SizedBox(height: 20),
               _LightInput(controller: _passwordController, label: "Password", icon: Icons.lock_outline, isPassword: true),
               
               const SizedBox(height: 40),
               
-              // MAIN BUTTON
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -176,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// ... (Helper widgets remain unchanged)
+// ... (Helper widgets)
 class _LightInput extends StatelessWidget {
   final TextEditingController controller;
   final String label;

@@ -133,122 +133,127 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
     );
   }
 
-  // --- VIEW 1: MOOD CALENDAR + FOREST ---
+  // --- VIEW 1: MOOD CALENDAR + FOREST (FIXED SCROLLING) ---
   Widget _buildCalendarView(Map<DateTime, List<QueryDocumentSnapshot>> events) {
     // Flatten events to get all docs for the trees
     List<QueryDocumentSnapshot> allDocs = events.values.expand((x) => x).toList();
     final monthlyGroups = _groupEntriesByMonth(allDocs);
     final monthKeys = monthlyGroups.keys.toList(); // e.g. ["Feb 2026", "Jan 2026"]
 
-    return Column(
-      children: [
-        TableCalendar(
-          firstDay: DateTime.utc(2024, 1, 1),
-          lastDay: DateTime.utc(2030, 12, 31),
-          focusedDay: _focusedDay,
-          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-          onDaySelected: (selectedDay, focusedDay) {
-            setState(() {
-              _selectedDay = selectedDay;
-              _focusedDay = focusedDay;
-            });
-            _showDayDetails(context, events[DateTime(selectedDay.year, selectedDay.month, selectedDay.day)] ?? []);
-          },
-          calendarFormat: CalendarFormat.month,
-          startingDayOfWeek: StartingDayOfWeek.monday,
-          
-          headerStyle: HeaderStyle(
-            titleCentered: true,
-            formatButtonVisible: false,
-            titleTextStyle: GoogleFonts.domine(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.ink),
-            leftChevronIcon: const Icon(Icons.chevron_left, color: AppColors.ink),
-            rightChevronIcon: const Icon(Icons.chevron_right, color: AppColors.ink),
-          ),
-          calendarStyle: CalendarStyle(
-            todayDecoration: const BoxDecoration(color: Colors.transparent, shape: BoxShape.circle),
-            todayTextStyle: GoogleFonts.lato(color: AppColors.sage, fontWeight: FontWeight.bold),
-            selectedDecoration: const BoxDecoration(color: AppColors.ink, shape: BoxShape.circle),
-            defaultTextStyle: GoogleFonts.lato(color: AppColors.ink),
-            weekendTextStyle: GoogleFonts.lato(color: AppColors.stone),
-            outsideDaysVisible: false,
-          ),
-          
-          calendarBuilders: CalendarBuilders(
-            markerBuilder: (context, date, docList) {
-              if (docList.isEmpty) return null;
-              
-              double total = 0;
-              int count = 0;
-
-              for (var d in docList) {
-                if (d is DocumentSnapshot) {
-                   final data = d.data() as Map<String, dynamic>?;
-                   if (data != null) {
-                      total += (data['mood_score'] ?? 5.0).toDouble();
-                      count++;
-                   }
-                }
-              }
-
-              if (count == 0) return null;
-              double avg = total / count;
-              
-              return Align(
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 6.0),
-                  width: 6, height: 6,
-                  decoration: BoxDecoration(
-                    color: _getMoodColor(avg),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              );
+    // 1. ADDED: SingleChildScrollView to prevent overflow
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          TableCalendar(
+            firstDay: DateTime.utc(2024, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: _focusedDay,
+            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+            onDaySelected: (selectedDay, focusedDay) {
+              setState(() {
+                _selectedDay = selectedDay;
+                _focusedDay = focusedDay;
+              });
+              _showDayDetails(context, events[DateTime(selectedDay.year, selectedDay.month, selectedDay.day)] ?? []);
             },
-          ),
-          eventLoader: (day) {
-            return events[DateTime(day.year, day.month, day.day)] ?? [];
-          },
-        ),
-        
-        const SizedBox(height: 10),
-        Divider(color: AppColors.stone.withOpacity(0.2), indent: 24, endIndent: 24),
-        
-        // --- THE MOOD FOREST ---
-        Expanded(
-          child: monthlyGroups.isEmpty 
-            ? Center(child: Text("Start planting memories.", style: GoogleFonts.lato(color: AppColors.stone)))
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // 1. THE LEGEND (Left Space)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 24, bottom: 40, right: 10),
-                    child: _buildForestLegend(),
-                  ),
+            calendarFormat: CalendarFormat.month,
+            startingDayOfWeek: StartingDayOfWeek.monday,
+            
+            headerStyle: HeaderStyle(
+              titleCentered: true,
+              formatButtonVisible: false,
+              titleTextStyle: GoogleFonts.domine(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.ink),
+              leftChevronIcon: const Icon(Icons.chevron_left, color: AppColors.ink),
+              rightChevronIcon: const Icon(Icons.chevron_right, color: AppColors.ink),
+            ),
+            calendarStyle: CalendarStyle(
+              todayDecoration: const BoxDecoration(color: Colors.transparent, shape: BoxShape.circle),
+              todayTextStyle: GoogleFonts.lato(color: AppColors.sage, fontWeight: FontWeight.bold),
+              selectedDecoration: const BoxDecoration(color: AppColors.ink, shape: BoxShape.circle),
+              defaultTextStyle: GoogleFonts.lato(color: AppColors.ink),
+              weekendTextStyle: GoogleFonts.lato(color: AppColors.stone),
+              outsideDaysVisible: false,
+            ),
+            
+            calendarBuilders: CalendarBuilders(
+              markerBuilder: (context, date, docList) {
+                if (docList.isEmpty) return null;
+                
+                double total = 0;
+                int count = 0;
 
-                  // 2. THE TREES (Scrollable from Right)
-                  Expanded(
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      // We only pad the right side because the Legend handles the left padding
-                      padding: const EdgeInsets.only(right: 24, bottom: 10),
-                      reverse: true, // Newest months on the right
-                      itemCount: monthKeys.length,
-                      itemBuilder: (context, index) {
-                        String monthName = monthKeys[index];
-                        List<QueryDocumentSnapshot> monthEntries = monthlyGroups[monthName]!;
-                        return _buildTreeCard(monthName, monthEntries);
-                      },
+                for (var d in docList) {
+                  if (d is DocumentSnapshot) {
+                     final data = d.data() as Map<String, dynamic>?;
+                     if (data != null) {
+                        total += (data['mood_score'] ?? 5.0).toDouble();
+                        count++;
+                     }
+                  }
+                }
+
+                if (count == 0) return null;
+                double avg = total / count;
+                
+                return Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 6.0),
+                    width: 6, height: 6,
+                    decoration: BoxDecoration(
+                      color: _getMoodColor(avg),
+                      shape: BoxShape.circle,
                     ),
                   ),
-                ],
-              ),
-        ),
+                );
+              },
+            ),
+            eventLoader: (day) {
+              return events[DateTime(day.year, day.month, day.day)] ?? [];
+            },
+          ),
+          
+          const SizedBox(height: 10),
+          Divider(color: AppColors.stone.withOpacity(0.2), indent: 24, endIndent: 24),
+          
+          // --- THE MOOD FOREST ---
+          // 2. CHANGED: Replaced Expanded with SizedBox(height: 320)
+          SizedBox(
+            height: 320,
+            child: monthlyGroups.isEmpty 
+              ? Center(child: Text("Start planting memories.", style: GoogleFonts.lato(color: AppColors.stone)))
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // 1. THE LEGEND (Left Space)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 24, bottom: 40, right: 10),
+                      child: _buildForestLegend(),
+                    ),
 
-        Center(child: Text("Tap a date to recall.", style: GoogleFonts.lato(color: AppColors.stone.withOpacity(0.5)))),
-        const SizedBox(height: 20),
-      ],
+                    // 2. THE TREES (Scrollable from Right)
+                    Expanded(
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        // We only pad the right side because the Legend handles the left padding
+                        padding: const EdgeInsets.only(right: 24, bottom: 10),
+                        reverse: true, // Newest months on the right
+                        itemCount: monthKeys.length,
+                        itemBuilder: (context, index) {
+                          String monthName = monthKeys[index];
+                          List<QueryDocumentSnapshot> monthEntries = monthlyGroups[monthName]!;
+                          return _buildTreeCard(monthName, monthEntries);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+          ),
+
+          Center(child: Text("Tap a date to recall.", style: GoogleFonts.lato(color: AppColors.stone.withOpacity(0.5)))),
+          const SizedBox(height: 40), // Added bottom padding for better scroll feel
+        ],
+      ),
     );
   }
 
