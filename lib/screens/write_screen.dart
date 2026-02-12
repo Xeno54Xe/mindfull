@@ -106,7 +106,7 @@ class _WriteScreenState extends State<WriteScreen> {
       double lon = position?.longitude ?? 0.0;
 
       final response = await http.post(
-        Uri.parse(_backendUrl), // Use the dynamic URL
+        Uri.parse("$_backendUrl/analyze"), // Use the dynamic URL
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({ 
           "text": text, 

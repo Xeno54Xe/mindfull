@@ -190,7 +190,7 @@ class _PatternsTabState extends State<PatternsTab> {
       final musicProfile = prefs.getString('music_profile') ?? "General Pop";
 
       final response = await http.post(
-        Uri.parse(_backendUrl),
+        Uri.parse("$_backendUrl/analyze-mood-music"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "user_id": user?.uid,

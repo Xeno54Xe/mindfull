@@ -60,7 +60,7 @@ class _WritingPageState extends State<WritingPage> {
       Map<String, dynamic> aiAnalysis = {};
       try {
         final response = await http.post(
-          Uri.parse(_backendUrl),
+          Uri.parse("$_backendUrl/analyze"),
           headers: {"Content-Type": "application/json"},
           body: jsonEncode({
             "text": _journalController.text,
