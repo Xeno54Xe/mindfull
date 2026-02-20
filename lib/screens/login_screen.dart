@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart'; // Needed for kIsWeb check
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -63,15 +64,17 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- GOOGLE SIGN IN (HARDCODED FIX) ---
+  // --- GOOGLE SIGN IN (DUAL-MODE FIX) ---
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      // 1. HARDCODED CLIENT ID (This bypasses the .env error completely)
-      const String clientId = "1069402233046-cf4052vo7esbfahck94ru4sgh15kfkal.apps.googleusercontent.com";
-
+      // SMART FIX: 
+      // 1. If Web -> Use the Client ID.
+      // 2. If Android -> Pass null (Plugin reads google-services.json automatically).
       final GoogleSignIn googleSignIn = GoogleSignIn(
-        clientId: clientId, 
+        clientId: kIsWeb 
+            ? "1069402233046-cf4052vo7esbfahck94ru4sgh15kfkal.apps.googleusercontent.com" 
+            : null,
       );
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
@@ -90,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await FirebaseAuth.instance.signInWithCredential(credential);
       
-      // FORCE NAVIGATION TO AUTH GATE
+      // Navigate to Auth Gate
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const AuthGate()),

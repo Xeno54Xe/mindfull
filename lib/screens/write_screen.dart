@@ -92,19 +92,24 @@ class _WriteScreenState extends State<WriteScreen> {
     } catch (e) { return null; }
   }
 
+  // --- THE "DEBUG EARS" VERSION ---
   Future<void> analyzeAndRedirect() async {
     final text = _journalController.text;
     final user = FirebaseAuth.instance.currentUser;
     if (text.isEmpty || user == null) return;
 
     setState(() => _isLoading = true);
+    print("🚀 STARTING ANALYSIS..."); // DEBUG LOG
 
     try {
       Position? position = await _determinePosition();
       String timeNow = DateFormat('h:mm a').format(DateTime.now());
       double lat = position?.latitude ?? 0.0;
       double lon = position?.longitude ?? 0.0;
+      
+      print("📍 Location found: $lat, $lon"); // DEBUG LOG
 
+      // 1. HIT THE SERVER
       final response = await http.post(
         Uri.parse("$_backendUrl/analyze"), // Use the dynamic URL
         headers: {"Content-Type": "application/json"},
@@ -117,9 +122,14 @@ class _WriteScreenState extends State<WriteScreen> {
         }),
       );
 
+      print("📨 Server Response Code: ${response.statusCode}"); // CRITICAL DEBUG LOG
+      print("📄 Server Body: ${response.body}"); // CRITICAL DEBUG LOG
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
+        // 2. SAVE TO FIREBASE
+        print("🔥 Saving to Firestore...");
         await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('entries').add({
           'text': text, // Keep legacy field for safety
           'content': text, // Ensure consistent naming with other parts of app
@@ -133,10 +143,29 @@ class _WriteScreenState extends State<WriteScreen> {
           'music_profile_used': _userMusicProfile, // Good for debugging
         });
         
-        if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ResultScreen(data: data)));
+        print("✅ Saved! Navigating...");
+        
+        if (mounted) {
+           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ResultScreen(data: data)));
+        }
+      } else {
+        // HANDLES NON-200 ERRORS (The "Silent Failure" Fix)
+        print("⚠️ Server Error: ${response.statusCode}");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Server Error ${response.statusCode}: ${response.body}"),
+              backgroundColor: AppColors.clay,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      print("❌ CRITICAL ERROR: $e"); // SEE THIS IN CONSOLE
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
