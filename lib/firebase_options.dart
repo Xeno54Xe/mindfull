@@ -31,9 +31,9 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyB0asG0c4MtyWGSa9BKvgy6jip08g1ClOI', 
     appId: '1:1069402233046:web:47e92e31de2c8a45ee9177', 
     messagingSenderId: '1069402233046', 
-    projectId: 'mindfull-app', 
-    authDomain: 'mindfull-app.firebaseapp.com',
-    storageBucket: 'mindfull-app.appspot.com',
+    projectId: 'mindfull-app-68b82', 
+    authDomain: 'mindfull-app-68b82.firebaseapp.com',
+    storageBucket: 'mindfull-app-68b82.appspot.com',
     measurementId: 'G-2R999VLRSE', // Optional
   );
 

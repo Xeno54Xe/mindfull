@@ -33,7 +33,16 @@ try:
 except Exception as e:
     print(f"⚠️ Spotify Client Error: {e}")
 
+
+# 👇 1. FIRST CREATE THE APP 👇
 app = FastAPI()
+
+# 👇 2. THEN ADD THE HEALTH CHECK 👇
+@app.get("/")
+@app.head("/")  # UptimeRobot often sends HEAD requests instead of GET
+def health_check():
+    return {"status": "alive", "message": "MindFull Backend is awake!"}
+
 
 # --- CORS (SECURITY) SETUP ---
 app.add_middleware(
@@ -142,17 +151,17 @@ def analyze_mood(entry: JournalEntry):
         
         Task:
         1. Identify the Mood (1 word) & Score (1-10).
-           🔴 SCORING RUBRIC:
-           - 1-3: High Distress (Sadness, Anxiety, Anger).
-           - 4-6: Neutral, Calm, Bored.
-           - 7-10: Happy, Excited, Proud.
+            🔴 SCORING RUBRIC:
+            - 1-3: High Distress (Sadness, Anxiety, Anger).
+            - 4-6: Neutral, Calm, Bored.
+            - 7-10: Happy, Excited, Proud.
         
         2. Suggest ONE song.
-           🔴 RECOMMENDATION RULES (CRITICAL):
-           - If the user has specific artists in their PROFILE, prioritize a song by those artists (or a very similar style) that matches the MOOD.
-           - Example: If user loves "Taylor Swift" and is Sad -> Suggest "this is me trying" or "All Too Well".
-           - Example: If user loves "The Weeknd" and is Happy -> Suggest "Starboy" or "Blinding Lights".
-           - ANTI-CLICHÉ: Do NOT suggest "Happy" by Pharrell or "Someone Like You" by Adele unless explicitly requested.
+            🔴 RECOMMENDATION RULES (CRITICAL):
+            - If the user has specific artists in their PROFILE, prioritize a song by those artists (or a very similar style) that matches the MOOD.
+            - Example: If user loves "Taylor Swift" and is Sad -> Suggest "this is me trying" or "All Too Well".
+            - Example: If user loves "The Weeknd" and is Happy -> Suggest "Starboy" or "Blinding Lights".
+            - ANTI-CLICHÉ: Do NOT suggest "Happy" by Pharrell or "Someone Like You" by Adele unless explicitly requested.
         
         3. Give a short reason (mentioning their taste if relevant).
 
@@ -196,8 +205,8 @@ def analyze_week(request: AnalysisRequest):
     Task:
     1. Find a psychological pattern.
     2. Curate a "Mood Uplift" Playlist of 5 songs.
-       - STRICTLY follow the User's Taste Profile for genre/style.
-       - If they like Rap, give Rap. If they like Indie, give Indie.
+        - STRICTLY follow the User's Taste Profile for genre/style.
+        - If they like Rap, give Rap. If they like Indie, give Indie.
     3. Give 1 sentence of actionable advice.
 
     Return JSON:
