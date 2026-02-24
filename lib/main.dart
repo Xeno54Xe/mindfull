@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- Added for the logout fix
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart'; 
 import 'package:flutter/services.dart'; 
@@ -12,8 +13,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // --- 1. FIREBASE INITIALIZATION (BULLETPROOF VERSION) ---
-  // We try to initialize. If it fails (because it already exists), 
-  // we catch the error and continue anyway.
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -21,6 +20,13 @@ void main() async {
   } catch (e) {
     debugPrint("Firebase was already initialized. Continuing...");
   }
+
+  // 👇 --- THE GHOST KILLER: FORCE LOGOUT --- 👇
+  // This forces your browser to delete the bad/expired token.
+  // IMPORTANT: Once the app loads and you successfully log in, 
+  // delete this line so you don't get logged out every time!
+  await FirebaseAuth.instance.signOut();
+  // 👆 ----------------------------------------- 👆
 
   // --- 2. CHECK IF USER HAS SEEN INTRO ---
   final prefs = await SharedPreferences.getInstance();

@@ -65,35 +65,35 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // --- GOOGLE SIGN IN (DUAL-MODE FIX) ---
+  // --- GOOGLE SIGN IN (THE FINAL WEB + ANDROID FIX) ---
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      // SMART FIX: 
-      // 1. If Web -> Use the Client ID.
-      // 2. If Android -> Pass null (Plugin reads google-services.json automatically).
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        clientId: kIsWeb 
-            ? "1069402233046-cf4052vo7esbfahck94ru4sgh15kfkal.apps.googleusercontent.com" 
-            : null,
-      );
-
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       
-      if (googleUser == null) {
-        setState(() => _isLoading = false);
-        return; // User canceled the popup
+      if (kIsWeb) {
+        // 🌍 1. WEB MODE: Use Firebase's native web popup
+        GoogleAuthProvider authProvider = GoogleAuthProvider();
+        await FirebaseAuth.instance.signInWithPopup(authProvider);
+      } else {
+        // 📱 2. ANDROID MODE: Use the native plugin
+        final GoogleSignIn googleSignIn = GoogleSignIn();
+        final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+        
+        if (googleUser == null) {
+          setState(() => _isLoading = false);
+          return; // User canceled
+        }
+
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final AuthCredential credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        await FirebaseAuth.instance.signInWithCredential(credential);
       }
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      await FirebaseAuth.instance.signInWithCredential(credential);
       
-      // Navigate to Auth Gate
+      // ✅ 3. IF SUCCESSFUL, GO TO AUTH GATE
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const AuthGate()),

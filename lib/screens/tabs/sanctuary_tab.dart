@@ -435,7 +435,9 @@ class _EntryCard extends StatelessWidget {
   const _EntryCard({required this.doc});
 
   void _showFullMemory(BuildContext context, Map<String, dynamic> data) {
-    DateTime date = (data['timestamp'] as Timestamp).toDate();
+    DateTime date = data['timestamp'] != null 
+    ? (data['timestamp'] as Timestamp).toDate() 
+    : DateTime.now();
     double score = (data['mood_score'] ?? 5.0).toDouble();
     Color moodColor = score >= 8 ? AppColors.sage : (score >= 5 ? const Color(0xFFA8A593) : AppColors.clay);
 
@@ -613,7 +615,9 @@ class _EntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var data = doc.data() as Map<String, dynamic>;
-    DateTime date = (data['timestamp'] as Timestamp).toDate();
+    DateTime date = data['timestamp'] != null 
+    ? (data['timestamp'] as Timestamp).toDate() 
+    : DateTime.now();
     double score = (data['mood_score'] ?? 5.0).toDouble();
     Color moodColor = score >= 8 ? AppColors.sage : (score >= 5 ? const Color(0xFFA8A593) : AppColors.clay);
 
