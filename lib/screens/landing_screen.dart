@@ -4,7 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/auth_gate.dart'; // To navigate after finishing
+import '../services/auth_gate.dart';
 import '../theme/colors.dart';
 import '../widgets/paper_background.dart';
 
@@ -19,11 +19,9 @@ class _LandingScreenState extends State<LandingScreen> {
   final PageController _controller = PageController();
   bool onLastPage = false;
 
-  // --- THE LOGIC: SAVE & NAVIGATE ---
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('hasSeenIntro', true); // Mark as seen!
-
+    await prefs.setBool('hasSeenIntro', true);
     if (mounted) {
       Navigator.pushReplacement(
         context,
@@ -38,12 +36,10 @@ class _LandingScreenState extends State<LandingScreen> {
       body: PaperBackground(
         child: Stack(
           children: [
-            // 1. THE SLIDES
+            // Slides
             PageView(
               controller: _controller,
-              onPageChanged: (index) {
-                setState(() => onLastPage = (index == 2));
-              },
+              onPageChanged: (index) => setState(() => onLastPage = (index == 2)),
               children: const [
                 _IntroSlide(
                   icon: FontAwesomeIcons.featherPointed,
@@ -63,41 +59,45 @@ class _LandingScreenState extends State<LandingScreen> {
               ],
             ),
 
-            // 2. BOTTOM CONTROLS
+            // Bottom controls
             Container(
               alignment: const Alignment(0, 0.85),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  // SKIP BUTTON
                   TextButton(
                     onPressed: _completeOnboarding,
-                    child: Text("SKIP", style: GoogleFonts.lato(color: AppColors.stone, fontWeight: FontWeight.bold)),
+                    child: Text("SKIP",
+                        style: GoogleFonts.lato(
+                            color: context.colors.stone,
+                            fontWeight: FontWeight.bold)),
                   ),
-
-                  // DOT INDICATOR
                   SmoothPageIndicator(
                     controller: _controller,
                     count: 3,
-                    effect: const WormEffect(
-                      activeDotColor: AppColors.ink,
-                      dotColor: Color(0xFFD6D3C8),
+                    effect: WormEffect(
+                      activeDotColor: context.colors.ink,
+                      dotColor: context.colors.stone.withValues(alpha: 0.3),
                       dotHeight: 10,
                       dotWidth: 10,
                     ),
                   ),
-
-                  // NEXT / DONE BUTTON
                   onLastPage
                       ? TextButton(
                           onPressed: _completeOnboarding,
-                          child: Text("START", style: GoogleFonts.lato(color: AppColors.sage, fontWeight: FontWeight.bold)),
+                          child: Text("START",
+                              style: GoogleFonts.lato(
+                                  color: AppColors.sage,
+                                  fontWeight: FontWeight.bold)),
                         )
                       : TextButton(
-                          onPressed: () {
-                            _controller.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeIn);
-                          },
-                          child: Text("NEXT", style: GoogleFonts.lato(color: AppColors.ink, fontWeight: FontWeight.bold)),
+                          onPressed: () => _controller.nextPage(
+                              duration: const Duration(milliseconds: 500),
+                              curve: Curves.easeIn),
+                          child: Text("NEXT",
+                              style: GoogleFonts.lato(
+                                  color: context.colors.ink,
+                                  fontWeight: FontWeight.bold)),
                         ),
                 ],
               ),
@@ -110,11 +110,15 @@ class _LandingScreenState extends State<LandingScreen> {
 }
 
 class _IntroSlide extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final String title;
   final String subtitle;
 
-  const _IntroSlide({required this.icon, required this.title, required this.subtitle});
+  const _IntroSlide({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -123,19 +127,25 @@ class _IntroSlide extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 80, color: AppColors.ink)
-              .animate().fade(duration: 600.ms).scale(delay: 200.ms),
+          FaIcon(icon, size: 80, color: context.colors.ink)
+              .animate()
+              .fade(duration: 600.ms)
+              .scale(delay: 200.ms),
           const SizedBox(height: 40),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink),
+            style: GoogleFonts.domine(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: context.colors.ink),
           ).animate().fade(delay: 300.ms).slideY(begin: 0.2, end: 0),
           const SizedBox(height: 20),
           Text(
             subtitle,
             textAlign: TextAlign.center,
-            style: GoogleFonts.lato(fontSize: 16, height: 1.5, color: AppColors.stone),
+            style: GoogleFonts.lato(
+                fontSize: 16, height: 1.5, color: context.colors.stone),
           ).animate().fade(delay: 500.ms),
         ],
       ),

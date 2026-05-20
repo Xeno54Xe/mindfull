@@ -53,16 +53,16 @@ class EntryDetailScreen extends StatelessWidget {
             expandedHeight: 400.0,
             floating: false,
             pinned: true,
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
+            backgroundColor: context.colors.card,
             flexibleSpace: FlexibleSpaceBar(
               background: imageUrl.isNotEmpty
-                  ? Image.network(imageUrl, fit: BoxFit.cover, 
-                      color: Colors.black.withOpacity(0.3), colorBlendMode: BlendMode.darken)
+                  ? Image.network(imageUrl, fit: BoxFit.cover,
+                      color: Colors.black.withValues(alpha: 0.3), colorBlendMode: BlendMode.darken)
                   : Container(color: Colors.grey),
             ),
             leading: Container(
               margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), shape: BoxShape.circle),
               child: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
@@ -93,9 +93,9 @@ class EntryDetailScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: _getScoreColor(score).withOpacity(0.1),
+                          color: _getScoreColor(score).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: _getScoreColor(score).withOpacity(0.5)),
+                          border: Border.all(color: _getScoreColor(score).withValues(alpha: 0.5)),
                         ),
                         child: Text("Vibe: $score/10", 
                           style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: _getScoreColor(score))),
@@ -156,7 +156,7 @@ class EntryDetailScreen extends StatelessWidget {
                       onPressed: () => _launchSpotify(context),
                       style: OutlinedButton.styleFrom(
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: BorderSide(color: Theme.of(context).textTheme.bodyLarge!.color!.withOpacity(0.2)),
+                        side: BorderSide(color: Theme.of(context).textTheme.bodyLarge!.color!.withValues(alpha: 0.2)),
                       ),
                       child: Text("Play on Spotify", style: GoogleFonts.lato(fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge!.color)),
                     ),
