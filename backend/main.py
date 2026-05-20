@@ -240,43 +240,43 @@ def analyze_mood(entry: JournalEntry):
                 ai_data["score"] = 5
         data.update(ai_data)
 
-            # Search Spotify for album art — try structured query first,
-            # then fall back to plain text if artist doesn't match.
-            expected_artist = data.get("artist", "").lower()
-            track_name = data.get("track_name", "")
+        # Search Spotify for album art — try structured query first,
+        # then fall back to plain text if artist doesn't match.
+        expected_artist = data.get("artist", "").lower()
+        track_name = data.get("track_name", "")
 
-            def _best_track(items: list) -> dict | None:
-                """Return the first item whose artist name roughly matches."""
-                for t in items:
-                    returned_artist = t["artists"][0]["name"].lower()
-                    if expected_artist and (
-                        expected_artist in returned_artist
-                        or returned_artist in expected_artist
-                    ):
-                        return t
-                return items[0] if items else None
+        def _best_track(items: list) -> dict | None:
+            """Return the first item whose artist name roughly matches."""
+            for t in items:
+                returned_artist = t["artists"][0]["name"].lower()
+                if expected_artist and (
+                    expected_artist in returned_artist
+                    or returned_artist in expected_artist
+                ):
+                    return t
+            return items[0] if items else None
 
-            # Pass 1: structured query (most precise)
-            r1 = sp_generic.search(
-                q=f"track:{track_name} artist:{data.get('artist', '')}",
+        # Pass 1: structured query (most precise)
+        r1 = sp_generic.search(
+            q=f"track:{track_name} artist:{data.get('artist', '')}",
+            type="track", limit=5
+        )
+        match = _best_track(r1["tracks"]["items"])
+
+        # Pass 2: plain text fallback if no good artist match
+        if not match or expected_artist not in match["artists"][0]["name"].lower():
+            r2 = sp_generic.search(
+                q=f"{track_name} {data.get('artist', '')}",
                 type="track", limit=5
             )
-            match = _best_track(r1["tracks"]["items"])
+            match = _best_track(r2["tracks"]["items"]) or match
 
-            # Pass 2: plain text fallback if no good artist match
-            if not match or expected_artist not in match["artists"][0]["name"].lower():
-                r2 = sp_generic.search(
-                    q=f"{track_name} {data.get('artist', '')}",
-                    type="track", limit=5
-                )
-                match = _best_track(r2["tracks"]["items"]) or match
-
-            if match:
-                data["track_name"] = match["name"]
-                data["artist"] = match["artists"][0]["name"]
-                images = match["album"].get("images", [])
-                if images:
-                    data["image_url"] = images[0]["url"]
+        if match:
+            data["track_name"] = match["name"]
+            data["artist"] = match["artists"][0]["name"]
+            images = match["album"].get("images", [])
+            if images:
+                data["image_url"] = images[0]["url"]
 
     except Exception as e:
         print(f"❌ Analysis Error: {e}")
