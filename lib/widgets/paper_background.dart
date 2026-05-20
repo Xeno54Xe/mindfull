@@ -10,9 +10,7 @@ class PaperBackground extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: double.infinity,
-      decoration: const BoxDecoration(
-        color: AppColors.paperBackground,
-      ),
+      color: context.colors.background,
       child: child,
     );
   }

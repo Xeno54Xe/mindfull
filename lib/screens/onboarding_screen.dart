@@ -50,14 +50,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _fetchArtists(String query) async {
     setState(() => _isLoadingArtists = true);
     try {
-      final url = Uri.parse("$_backendUrl/search-artists?q=$query");
-      final response = await http.get(url);
-      
+      // FIX: use Uri with queryParameters so special chars/spaces are URL-encoded automatically
+      final uri = Uri.parse(_backendUrl).replace(
+        path: '/search-artists',
+        queryParameters: {'q': query},
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() {
-          _searchResults = List<Map<String, dynamic>>.from(data['artists']);
-        });
+        if (mounted) {
+          setState(() {
+            _searchResults = List<Map<String, dynamic>>.from(data['artists']);
+          });
+        }
       }
     } catch (e) {
       print("Artist Fetch Error: $e");
@@ -123,14 +129,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.paperBackground,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
             // PROGRESS BAR
             LinearProgressIndicator(
               value: (_currentPage + 1) / 3,
-              backgroundColor: AppColors.stone.withOpacity(0.2),
+              backgroundColor: context.colors.stone.withValues(alpha: 0.2),
               color: AppColors.sage,
               minHeight: 4,
             ),
@@ -182,7 +188,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.ink,
+                    backgroundColor: context.colors.ink,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                   child: _isSaving 
@@ -209,16 +215,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         children: [
           Text(subtitle.toUpperCase(), style: GoogleFonts.lato(color: AppColors.sage, letterSpacing: 2, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          Text(title, style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink)),
+          Text(title, style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: context.colors.ink)),
           const SizedBox(height: 30),
           TextField(
             controller: controller,
-            style: GoogleFonts.lato(fontSize: 20, color: AppColors.ink),
+            style: GoogleFonts.lato(fontSize: 20, color: context.colors.ink),
             decoration: InputDecoration(
-              prefixIcon: Icon(icon, color: AppColors.stone),
+              prefixIcon: Icon(icon, color: context.colors.stone),
               hintText: hint,
-              hintStyle: GoogleFonts.lato(color: AppColors.stone.withOpacity(0.5)),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.stone.withOpacity(0.3))),
+              hintStyle: GoogleFonts.lato(color: context.colors.stone.withValues(alpha: 0.5)),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.stone.withValues(alpha: 0.3))),
               focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.sage, width: 2)),
             ),
           ),
@@ -236,7 +242,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 20),
           Text("SECONDLY SET THE VIBE", style: GoogleFonts.lato(color: AppColors.sage, letterSpacing: 2, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          Text("Pick up to 5 artists. (we'll recommend you based on these)", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink)),
+          Text("Pick up to 5 artists. (we'll recommend you based on these)", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: context.colors.ink)),
           
           const SizedBox(height: 20),
           
@@ -248,7 +254,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 return Chip(
                   avatar: CircleAvatar(backgroundImage: artist['image'] != "" ? NetworkImage(artist['image']!) : null),
                   label: Text(artist['name']!),
-                  backgroundColor: AppColors.sage.withOpacity(0.2),
+                  backgroundColor: AppColors.sage.withValues(alpha: 0.2),
                   deleteIcon: const Icon(Icons.close, size: 14),
                   onDeleted: () => setState(() => _selectedArtists.remove(artist)),
                 );
@@ -262,9 +268,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             onChanged: _onSearchChanged,
             decoration: InputDecoration(
               hintText: "Search artists...",
-              prefixIcon: const Icon(Icons.search, color: AppColors.stone),
+              prefixIcon: Icon(Icons.search, color: context.colors.stone),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: context.colors.card,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               contentPadding: const EdgeInsets.symmetric(vertical: 14),
             ),
@@ -291,7 +297,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onTap: () => _toggleArtist(artist),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: isSelected ? AppColors.sage.withOpacity(0.1) : Colors.white,
+                          color: isSelected ? AppColors.sage.withValues(alpha: 0.1) : context.colors.card,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isSelected ? AppColors.sage : Colors.transparent, 
@@ -303,9 +309,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           children: [
                             CircleAvatar(
                               radius: 30,
-                              backgroundColor: AppColors.stone.withOpacity(0.2),
+                              backgroundColor: context.colors.stone.withValues(alpha: 0.2),
                               backgroundImage: (artist['image'] != null) ? NetworkImage(artist['image']) : null,
-                              child: (artist['image'] == null) ? const Icon(Icons.music_note, color: AppColors.stone) : null,
+                              child: (artist['image'] == null) ? Icon(Icons.music_note, color: context.colors.stone) : null,
                             ),
                             const SizedBox(height: 10),
                             Padding(
@@ -315,7 +321,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 textAlign: TextAlign.center,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.ink),
+                                style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: context.colors.ink),
                               ),
                             ),
                           ],
