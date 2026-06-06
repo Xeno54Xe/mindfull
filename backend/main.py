@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -23,10 +24,13 @@ except Exception as e:
     print(f"⚠️ Groq Client Error: {e}")
 
 try:
-    sp_generic = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-        client_id=SPOTIFY_CLIENT_ID,
-        client_secret=SPOTIFY_CLIENT_SECRET
-    ))
+    sp_generic = spotipy.Spotify(
+        auth_manager=SpotifyClientCredentials(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+        ),
+        requests_timeout=6,   # 6-second per-call timeout — prevents slow lookups blocking everything
+    )
 except Exception as e:
     print(f"⚠️ Spotify Client Error: {e}")
 
@@ -188,15 +192,18 @@ def search_artists(q: str = ""):
 def analyze_mood(entry: JournalEntry):
     print(f"📝 Analyzing Entry (Profile: {entry.music_profile})...")
 
+    # NOTE: image_url is intentionally empty — it gets filled by the Spotify
+    # search below. Empty string is handled gracefully by the Flutter client.
     data = {
         "mood": "Calm",
         "artist": "Lofi Girl",
         "reason": "Just breathing.",
         "score": 5,
         "track_name": "lofi hip hop radio",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b2735755e164993798e0c9ef7d7a",
+        "image_url": "",
     }
 
+    # ── Step 1: LLM mood + song analysis ────────────────────────────────────
     try:
         prompt = f"""
         Analyze this diary entry (Time: {entry.local_time}):
@@ -228,8 +235,6 @@ def analyze_mood(entry: JournalEntry):
         """
 
         ai_data = call_llama(prompt)
-        # call_llama returns _SAFETY_FALLBACK (never None) unless a non-safety network error
-        # occurred; in that case we keep the hardcoded defaults already in `data`.
         if ai_data is None:
             ai_data = _SAFETY_FALLBACK.copy()
         # Coerce score to int safely
@@ -240,13 +245,16 @@ def analyze_mood(entry: JournalEntry):
                 ai_data["score"] = 5
         data.update(ai_data)
 
-        # Search Spotify for album art — try structured query first,
-        # then fall back to plain text if artist doesn't match.
+    except Exception as e:
+        print(f"❌ LLM Analysis Error: {e}")
+
+    # ── Step 2: Spotify album art lookup (isolated — never contaminates step 1) ──
+    try:
         expected_artist = data.get("artist", "").lower()
-        track_name = data.get("track_name", "")
+        track_name      = data.get("track_name", "")
 
         def _best_track(items: list) -> dict | None:
-            """Return the first item whose artist name roughly matches."""
+            """Prefer items whose artist name matches; otherwise return first."""
             for t in items:
                 returned_artist = t["artists"][0]["name"].lower()
                 if expected_artist and (
@@ -257,29 +265,30 @@ def analyze_mood(entry: JournalEntry):
             return items[0] if items else None
 
         # Pass 1: structured query (most precise)
-        r1 = sp_generic.search(
+        r1    = sp_generic.search(
             q=f"track:{track_name} artist:{data.get('artist', '')}",
-            type="track", limit=5
+            type="track", limit=5,
         )
         match = _best_track(r1["tracks"]["items"])
 
-        # Pass 2: plain text fallback if no good artist match
+        # Pass 2: plain-text fallback when no good artist match
         if not match or expected_artist not in match["artists"][0]["name"].lower():
-            r2 = sp_generic.search(
+            r2    = sp_generic.search(
                 q=f"{track_name} {data.get('artist', '')}",
-                type="track", limit=5
+                type="track", limit=5,
             )
             match = _best_track(r2["tracks"]["items"]) or match
 
         if match:
             data["track_name"] = match["name"]
-            data["artist"] = match["artists"][0]["name"]
+            data["artist"]     = match["artists"][0]["name"]
             images = match["album"].get("images", [])
             if images:
                 data["image_url"] = images[0]["url"]
 
     except Exception as e:
-        print(f"❌ Analysis Error: {e}")
+        print(f"⚠️ Spotify art lookup failed (non-fatal): {e}")
+        # image_url stays "" — Flutter shows a placeholder
 
     return data
 
@@ -562,22 +571,48 @@ Return ONLY this JSON (exactly 10 tracks):
         print("❌ LLM returned no tracks — returning empty playlist")
         return {"error": "playlist_generation_failed", "tracks": [], "title": "Your Mix"}
 
-    # Verify every song against Spotify
+    # ── Verify tracks against Spotify IN PARALLEL (5 workers) ───────────────
+    # Running sequentially took ~10s; parallel cuts it to ~2-3s.
+    raw_tracks = [
+        {"track": s.get("track", "").strip(),
+         "artist": s.get("artist", "").strip(),
+         "phase":  s.get("phase", 1)}
+        for s in llm_result.get("tracks", [])
+        if s.get("track", "").strip() and s.get("artist", "").strip()
+    ]
+
     verified: list[dict] = []
-    for song in llm_result.get("tracks", []):
-        t = song.get("track", "").strip()
-        a = song.get("artist", "").strip()
-        phase = song.get("phase", 1)
-        if not t or not a:
-            continue
-        result = _verify_on_spotify(t, a)
+
+    def _verify_with_phase(item: dict) -> Optional[dict]:
+        result = _verify_on_spotify(item["track"], item["artist"])
         if result:
-            result["phase"] = phase
-            verified.append(result)
-        if len(verified) >= 10:
-            break
+            result["phase"] = item["phase"]
+        return result
+
+    try:
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {pool.submit(_verify_with_phase, item): item for item in raw_tracks}
+            for future in as_completed(futures, timeout=25):
+                try:
+                    result = future.result()
+                    if result:
+                        verified.append(result)
+                except Exception as e:
+                    print(f"⚠️ Track verify exception: {e}")
+    except Exception as e:
+        print(f"⚠️ Parallel verify pool error: {e}")
+
+    # Sort by phase so the arc order is preserved
+    verified.sort(key=lambda x: x.get("phase", 1))
+    # Cap at 10
+    verified = verified[:10]
 
     print(f"✅ Playlist ready: {len(verified)} verified tracks")
+
+    # Return partial results — even 4 tracks is a valid playlist.
+    # Only hard-fail if nothing came back at all.
+    if not verified:
+        return {"error": "playlist_generation_failed", "tracks": [], "title": "Your Mix"}
 
     return {
         "title":        llm_result.get("playlist_title", f"{request.mood} Mix"),

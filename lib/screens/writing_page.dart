@@ -41,6 +41,20 @@ class _WritingPageState extends State<WritingPage> {
     return liveUrl;
   }
 
+  @override
+  void initState() {
+    super.initState();
+    // Fire-and-forget ping so Render wakes up while the user is writing.
+    // By the time they hit Analyze the server is already warm.
+    _pingBackend();
+  }
+
+  void _pingBackend() {
+    http.get(Uri.parse('$_backendUrl/')).timeout(
+      const Duration(seconds: 10),
+    ).catchError((_) {}); // silently ignore — this is best-effort only
+  }
+
   Future<String> _fetchMusicProfile(String uid) async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -294,13 +308,15 @@ class _AnalysisBottomSheetContentState
           'music_profile': musicProfile,
           'arc_type':      _selectedArc,
         }),
-      ).timeout(const Duration(seconds: 45));
+      ).timeout(const Duration(seconds: 90));
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final playlistData = jsonDecode(response.body) as Map<String, dynamic>;
-        if ((playlistData['tracks'] as List?)?.isEmpty ?? true) {
+        final tracks = playlistData['tracks'] as List?;
+        // Accept partial playlists (4+ tracks) — backend may verify fewer than 10
+        if (tracks == null || tracks.length < 4) {
           _showSnack('Couldn\'t generate playlist. Try again.', AppColors.clay);
           return;
         }
@@ -554,7 +570,7 @@ class _AnalysisBottomSheetContentState
             children: _arcOptions.map((opt) {
               final key      = opt['key']   as String;
               final label    = opt['label'] as String;
-              final icon     = opt['icon']  as IconData;
+              final icon     = opt['icon']  as FaIconData;
               final isActive = _selectedArc == key;
 
               final chipColor = key == 'lift'
