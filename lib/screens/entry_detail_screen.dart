@@ -10,158 +10,263 @@ class EntryDetailScreen extends StatelessWidget {
 
   const EntryDetailScreen({super.key, required this.data});
 
-  Future<void> _launchSpotify(BuildContext context) async {
-    final String track = data['track_name'] ?? "";
-    // Simple search link if we don't have the direct URI
-    final Uri url = Uri.parse("https://open.spotify.com/search/$track");
+  Future<void> _launchSpotify(BuildContext context, String track) async {
+    final query = Uri.encodeComponent(track);
+    final url   = Uri.parse("https://open.spotify.com/search/$query");
     try {
       if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        throw Exception('Could not launch $url');
+        throw Exception('Could not launch Spotify');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Couldn't open Spotify: $e"),
+            backgroundColor: AppColors.clay,
+          ),
+        );
       }
     }
   }
 
+  // ── field-name normalisation (handles old 'text' and new 'content' keys) ──
+  String _content()  => (data['content'] ?? data['text']      ?? '') as String;
+  String _mood()     => (data['mood']    ?? data['mood_label'] ?? 'Reflective') as String;
+  String _artist()   => (data['artist']                        ?? '') as String;
+  String _track()    => (data['track_name']                    ?? '') as String;
+  String _imageUrl() => (data['image_url']                     ?? '') as String;
+  String _weather()  => (data['weather_context']               ?? '') as String;
+  bool   _isVent()   => data['is_vent'] == true;
+
+  int _score() {
+    final raw = data['mood_score'] ?? data['score'] ?? 5;
+    return (raw as num).round();
+  }
+
+  DateTime _date() {
+    final ts = data['timestamp'];
+    if (ts == null) return DateTime.now();
+    try { return (ts as dynamic).toDate() as DateTime; }
+    catch (_) { return DateTime.now(); }
+  }
+
+  Color _scoreColor(int score) {
+    if (score >= 7) return AppColors.sage;
+    if (score >= 4) return const Color(0xFFA8A593);
+    return AppColors.clay;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
-    // Extract Data safely
-    final String text = data['text'] ?? "";
-    final String mood = data['mood'] ?? "Unknown";
-    final String artist = data['artist'] ?? "Unknown";
-    final String track = data['track_name'] ?? "Unknown";
-    final String imageUrl = data['image_url'] ?? "";
-    final String weather = data['weather_context'] ?? "";
-    final int score = data['mood_score'] ?? 5;
-    
-    // Timestamp handling
-    final DateTime date = data['timestamp'] != null 
-        ? (data['timestamp'] as dynamic).toDate() 
-        : DateTime.now();
+    final content  = _content();
+    final mood     = _mood();
+    final artist   = _artist();
+    final track    = _track();
+    final imageUrl = _imageUrl();
+    final weather  = _weather();
+    final score    = _score();
+    final date     = _date();
+    final isVent   = _isVent();
+    final scoreCol = isVent ? AppColors.clay : _scoreColor(score);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      // We use a CustomScrollView for that "Elastic" feel when scrolling
+      backgroundColor: context.colors.background,
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
-          // 1. BIG IMAGE HEADER
+
+          // ── Hero image header ─────────────────────────────────────────────
           SliverAppBar(
-            expandedHeight: 400.0,
+            expandedHeight: imageUrl.isNotEmpty ? 380.0 : 180.0,
             floating: false,
             pinned: true,
             backgroundColor: context.colors.card,
+            elevation: 0,
             flexibleSpace: FlexibleSpaceBar(
               background: imageUrl.isNotEmpty
-                  ? Image.network(imageUrl, fit: BoxFit.cover,
-                      color: Colors.black.withValues(alpha: 0.3), colorBlendMode: BlendMode.darken)
-                  : Container(color: Colors.grey),
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              _fallbackHeader(context, scoreCol, mood),
+                        ),
+                        // Gradient overlay
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.15),
+                                Colors.black.withValues(alpha: 0.55),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : _fallbackHeader(context, scoreCol, mood),
             ),
             leading: Container(
               margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.45),
+                shape: BoxShape.circle,
+              ),
               child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white, size: 16),
                 onPressed: () => Navigator.pop(context),
               ),
             ),
           ),
 
-          // 2. THE CONTENT
+          // ── Body ─────────────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 48),
               decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                color: context.colors.background,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
               ),
-              transform: Matrix4.translationValues(0.0, -30.0, 0.0), // Overlap effect
+              transform: Matrix4.translationValues(0, -24, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header: Date & Score
+
+                  // Date + score pill
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         DateFormat('MMMM d, yyyy').format(date),
-                        style: GoogleFonts.lato(fontSize: 14, color: Colors.grey, letterSpacing: 1),
+                        style: GoogleFonts.lato(
+                          fontSize: 13,
+                          color: context.colors.stone,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 5),
                         decoration: BoxDecoration(
-                          color: _getScoreColor(score).withValues(alpha: 0.1),
+                          color: scoreCol.withValues(alpha: 0.10),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: _getScoreColor(score).withValues(alpha: 0.5)),
+                          border: Border.all(
+                              color: scoreCol.withValues(alpha: 0.4)),
                         ),
-                        child: Text("Vibe: $score/10", 
-                          style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: _getScoreColor(score))),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Mood Title
-                  Text(mood, style: GoogleFonts.domine(fontSize: 36, fontWeight: FontWeight.bold)),
-                  
-                  // Song Info
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(FontAwesomeIcons.spotify, size: 16, color: Color(0xFF1DB954)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text("$track • $artist", 
-                          style: GoogleFonts.lato(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+                        child: Text(
+                          isVent ? '🔥 Vent' : 'Mood $score/10',
+                          style: GoogleFonts.lato(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: scoreCol,
+                          ),
+                        ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 30),
-                  const Divider(),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 16),
 
-                  // The Journal Entry (The Aesthetic Part)
+                  // Mood title
                   Text(
-                    text,
-                    style: GoogleFonts.lato(
-                      fontSize: 18, 
-                      height: 1.8, // Tall line height for readability
-                      color: Theme.of(context).textTheme.bodyLarge!.color
+                    isVent ? 'Venting' : mood,
+                    style: GoogleFonts.domine(
+                      fontSize: 34,
+                      fontWeight: FontWeight.bold,
+                      color: context.colors.ink,
                     ),
                   ),
 
-                  const SizedBox(height: 40),
-                  
-                  // Context Details (Small footer)
-                  if (weather.isNotEmpty)
+                  // Song info
+                  if (!isVent && track.isNotEmpty) ...[
+                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.cloud_queue, size: 14, color: Colors.grey),
+                        const FaIcon(FontAwesomeIcons.spotify,
+                            size: 14, color: Color(0xFF1DB954)),
                         const SizedBox(width: 8),
-                        Text("Context: $weather", style: GoogleFonts.lato(fontSize: 12, color: Colors.grey)),
+                        Expanded(
+                          child: Text(
+                            artist.isNotEmpty ? '$track · $artist' : track,
+                            style: GoogleFonts.lato(
+                              fontSize: 14,
+                              color: context.colors.stone,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
-                    
-                  const SizedBox(height: 40),
-                  
-                  // Re-Listen Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: OutlinedButton(
-                      onPressed: () => _launchSpotify(context),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: BorderSide(color: Theme.of(context).textTheme.bodyLarge!.color!.withValues(alpha: 0.2)),
-                      ),
-                      child: Text("Play on Spotify", style: GoogleFonts.lato(fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge!.color)),
+                  ],
+
+                  const SizedBox(height: 28),
+                  Divider(
+                      color: context.colors.stone.withValues(alpha: 0.15),
+                      height: 1),
+                  const SizedBox(height: 28),
+
+                  // Entry text
+                  Text(
+                    content,
+                    style: GoogleFonts.domine(
+                      fontSize: 17,
+                      height: 1.8,
+                      color: context.colors.ink,
                     ),
                   ),
-                  const SizedBox(height: 50),
+
+                  // Weather context
+                  if (weather.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    Row(
+                      children: [
+                        Icon(Icons.cloud_queue_rounded,
+                            size: 14, color: context.colors.stone),
+                        const SizedBox(width: 8),
+                        Text(
+                          weather,
+                          style: GoogleFonts.lato(
+                              fontSize: 12, color: context.colors.stone),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  const SizedBox(height: 36),
+
+                  // Play on Spotify button
+                  if (!isVent && track.isNotEmpty)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _launchSpotify(context, track),
+                        icon: const FaIcon(FontAwesomeIcons.spotify,
+                            size: 16, color: Color(0xFF1DB954)),
+                        label: Text(
+                          "Play on Spotify",
+                          style: GoogleFonts.lato(
+                            fontWeight: FontWeight.bold,
+                            color: context.colors.ink,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                              color: context.colors.stone
+                                  .withValues(alpha: 0.25)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -171,9 +276,29 @@ class EntryDetailScreen extends StatelessWidget {
     );
   }
 
-  Color _getScoreColor(int score) {
-    if (score >= 8) return Colors.green;
-    if (score >= 5) return Colors.amber;
-    return Colors.red;
+  Widget _fallbackHeader(
+      BuildContext context, Color accentColor, String mood) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            accentColor.withValues(alpha: 0.25),
+            context.colors.card,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          mood,
+          style: GoogleFonts.domine(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: accentColor.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
+    );
   }
 }
