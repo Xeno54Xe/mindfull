@@ -554,7 +554,7 @@ class _AnalysisBottomSheetContentState
             children: _arcOptions.map((opt) {
               final key      = opt['key']   as String;
               final label    = opt['label'] as String;
-              final icon     = opt['icon']  as IconData;
+              final icon     = opt['icon']  as FaIconData;
               final isActive = _selectedArc == key;
 
               final chipColor = key == 'lift'
