@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'write_screen.dart';
+import 'calendar_screen.dart';
 import 'tabs/reflect_tab.dart';
 import 'tabs/patterns_tab.dart';
 import 'tabs/sanctuary_tab.dart';
@@ -19,7 +20,10 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
   List<Widget> get _tabs => [
-        ReflectTab(onHistoryTap: () => setState(() => _currentIndex = 3)),
+        ReflectTab(onHistoryTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CalendarScreen()),
+        )),
         const PatternsTab(),
         const SizedBox(),
         const SanctuaryTab(),
