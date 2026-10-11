@@ -8,6 +8,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../theme/colors.dart';
+import '../mood_garden_screen.dart';
 
 class SanctuaryTab extends StatefulWidget {
   const SanctuaryTab({super.key});
@@ -49,7 +50,7 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: AppColors.paperBackground,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: StreamBuilder(
           stream: FirebaseFirestore.instance
@@ -88,40 +89,78 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Sanctuary", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink)),
-                          Text("Your journey, recorded.", style: GoogleFonts.lato(fontSize: 14, color: AppColors.stone)),
+                          Text("Sanctuary", style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: context.colors.ink)),
+                          Text("Your journey, recorded.", style: GoogleFonts.lato(fontSize: 14, color: context.colors.stone)),
                         ],
                       ),
-                      // THE TOGGLE BUTTON
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: AppColors.cardColor,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.stone.withOpacity(0.2)),
-                        ),
-                        child: Row(
-                          children: [
-                            _ToggleButton(
-                              icon: FontAwesomeIcons.calendar, 
-                              isActive: _isCalendarView, 
-                              onTap: () => setState(() => _isCalendarView = true)
+                      // GARDEN + TOGGLE ROW
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Garden launch button
+                          GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const MoodGardenScreen()),
                             ),
-                            _ToggleButton(
-                              icon: FontAwesomeIcons.list, 
-                              isActive: !_isCalendarView, 
-                              onTap: () => setState(() => _isCalendarView = false)
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.sage
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                    color: AppColors.sage
+                                        .withValues(alpha: 0.3)),
+                              ),
+                              child: const FaIcon(
+                                  FontAwesomeIcons.seedling,
+                                  size: 15,
+                                  color: AppColors.sage),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Calendar / List toggle
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: context.colors.card,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: context.colors.stone
+                                      .withValues(alpha: 0.2)),
+                            ),
+                            child: Row(
+                              children: [
+                                _ToggleButton(
+                                  icon: FontAwesomeIcons.calendar,
+                                  isActive: _isCalendarView,
+                                  onTap: () => setState(
+                                      () => _isCalendarView = true),
+                                ),
+                                _ToggleButton(
+                                  icon: FontAwesomeIcons.list,
+                                  isActive: !_isCalendarView,
+                                  onTap: () => setState(
+                                      () => _isCalendarView = false),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
 
+                // --- RECENT PLAYLISTS ---
+                if (user != null) _buildRecentPlaylists(user.uid),
+
                 // --- CONTENT AREA ---
                 Expanded(
-                  child: _isCalendarView 
+                  child: _isCalendarView
                     ? _buildCalendarView(events)
                     : _buildListView(docs),
                 ),
@@ -130,6 +169,71 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
           },
         ),
       ),
+    );
+  }
+
+  // --- RECENT PLAYLISTS SECTION ---
+  Widget _buildRecentPlaylists(String uid) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('playlists')
+          .orderBy('created_at', descending: true)
+          .limit(3)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final playlists = snapshot.data!.docs;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── header ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.sage.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const FaIcon(FontAwesomeIcons.music,
+                        size: 12, color: AppColors.sage),
+                  ),
+                  const SizedBox(width: 10),
+                  Text("RECENT PLAYLISTS",
+                      style: GoogleFonts.lato(
+                          fontSize: 11,
+                          letterSpacing: 1.5,
+                          fontWeight: FontWeight.bold,
+                          color: context.colors.stone)),
+                ],
+              ),
+            ),
+            // ── horizontal scroll ──────────────────────────────────────
+            SizedBox(
+              height: 136,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                itemCount: playlists.length,
+                itemBuilder: (context, index) =>
+                    _PlaylistCard(doc: playlists[index]),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Divider(
+                color: context.colors.stone.withValues(alpha: 0.12),
+                indent: 24,
+                endIndent: 24),
+          ],
+        );
+      },
     );
   }
 
@@ -162,16 +266,16 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
             headerStyle: HeaderStyle(
               titleCentered: true,
               formatButtonVisible: false,
-              titleTextStyle: GoogleFonts.domine(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.ink),
-              leftChevronIcon: const Icon(Icons.chevron_left, color: AppColors.ink),
-              rightChevronIcon: const Icon(Icons.chevron_right, color: AppColors.ink),
+              titleTextStyle: GoogleFonts.domine(fontSize: 18, fontWeight: FontWeight.bold, color: context.colors.ink),
+              leftChevronIcon: Icon(Icons.chevron_left, color: context.colors.ink),
+              rightChevronIcon: Icon(Icons.chevron_right, color: context.colors.ink),
             ),
             calendarStyle: CalendarStyle(
               todayDecoration: const BoxDecoration(color: Colors.transparent, shape: BoxShape.circle),
               todayTextStyle: GoogleFonts.lato(color: AppColors.sage, fontWeight: FontWeight.bold),
-              selectedDecoration: const BoxDecoration(color: AppColors.ink, shape: BoxShape.circle),
-              defaultTextStyle: GoogleFonts.lato(color: AppColors.ink),
-              weekendTextStyle: GoogleFonts.lato(color: AppColors.stone),
+              selectedDecoration: BoxDecoration(color: context.colors.ink, shape: BoxShape.circle),
+              defaultTextStyle: GoogleFonts.lato(color: context.colors.ink),
+              weekendTextStyle: GoogleFonts.lato(color: context.colors.stone),
               outsideDaysVisible: false,
             ),
             
@@ -214,14 +318,14 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
           ),
           
           const SizedBox(height: 10),
-          Divider(color: AppColors.stone.withOpacity(0.2), indent: 24, endIndent: 24),
+          Divider(color: context.colors.stone.withValues(alpha: 0.2), indent: 24, endIndent: 24),
           
           // --- THE MOOD FOREST ---
           // 2. CHANGED: Replaced Expanded with SizedBox(height: 320)
           SizedBox(
             height: 320,
             child: monthlyGroups.isEmpty 
-              ? Center(child: Text("Start planting memories.", style: GoogleFonts.lato(color: AppColors.stone)))
+              ? Center(child: Text("Start planting memories.", style: GoogleFonts.lato(color: context.colors.stone)))
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -250,7 +354,7 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
                 ),
           ),
 
-          Center(child: Text("Tap a date to recall.", style: GoogleFonts.lato(color: AppColors.stone.withOpacity(0.5)))),
+          Center(child: Text("Tap a date to recall.", style: GoogleFonts.lato(color: context.colors.stone.withValues(alpha: 0.5)))),
           const SizedBox(height: 40), // Added bottom padding for better scroll feel
         ],
       ),
@@ -263,19 +367,19 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("FOREST GUIDE", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: AppColors.stone)),
+        Text("FOREST GUIDE", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: context.colors.stone)),
         const SizedBox(height: 15),
         
         // Size Explanation
         Row(
           children: [
-            const Icon(Icons.arrow_upward, size: 14, color: AppColors.ink),
+            Icon(Icons.arrow_upward, size: 14, color: context.colors.ink),
             const SizedBox(width: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("SIZE", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.ink)),
-                Text("Consistency", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+                Text("SIZE", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: context.colors.ink)),
+                Text("Consistency", style: GoogleFonts.lato(fontSize: 10, color: context.colors.stone)),
               ],
             ),
           ],
@@ -290,8 +394,8 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("GREEN", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.ink)),
-                Text("Radiant Days", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+                Text("GREEN", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: context.colors.ink)),
+                Text("Radiant Days", style: GoogleFonts.lato(fontSize: 10, color: context.colors.stone)),
               ],
             ),
           ],
@@ -306,8 +410,8 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("RED/BROWN", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.ink)),
-                Text("Heavy Days", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+                Text("RED/BROWN", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: context.colors.ink)),
+                Text("Heavy Days", style: GoogleFonts.lato(fontSize: 10, color: context.colors.stone)),
               ],
             ),
           ],
@@ -318,7 +422,7 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
 
   // --- VIEW 2: LIST SCROLL (UNCHANGED) ---
   Widget _buildListView(List<QueryDocumentSnapshot> docs) {
-    if (docs.isEmpty) return Center(child: Text("No stories yet.", style: GoogleFonts.domine(color: AppColors.stone)));
+    if (docs.isEmpty) return Center(child: Text("No stories yet.", style: GoogleFonts.domine(color: context.colors.stone)));
     
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -358,8 +462,8 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(monthName.toUpperCase(), style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1, color: AppColors.ink)),
-          Text("$count Memories", style: GoogleFonts.lato(fontSize: 10, color: AppColors.stone)),
+          Text(monthName.toUpperCase(), style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1, color: context.colors.ink)),
+          Text("$count Memories", style: GoogleFonts.lato(fontSize: 10, color: context.colors.stone)),
         ],
       ),
     );
@@ -372,25 +476,25 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
       isScrollControlled: true,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.6,
-        decoration: const BoxDecoration(
-          color: AppColors.paperBackground,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: context.colors.background,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.stone.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.colors.stone.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 20),
             Text(
               _selectedDay != null ? DateFormat('MMMM d, y').format(_selectedDay!) : "Selected Day",
-              style: GoogleFonts.domine(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
+              style: GoogleFonts.domine(fontSize: 22, fontWeight: FontWeight.bold, color: context.colors.ink),
             ),
             const SizedBox(height: 20),
             if (dailyDocs.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 40),
-                child: Center(child: Text("No entries for this day.", style: GoogleFonts.lato(color: AppColors.stone))),
+                child: Center(child: Text("No entries for this day.", style: GoogleFonts.lato(color: context.colors.stone))),
               )
             else
               Expanded(
@@ -407,7 +511,7 @@ class _SanctuaryTabState extends State<SanctuaryTab> {
 }
 
 class _ToggleButton extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final bool isActive;
   final VoidCallback onTap;
 
@@ -424,7 +528,7 @@ class _ToggleButton extends StatelessWidget {
           color: isActive ? AppColors.sage : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Icon(icon, size: 16, color: isActive ? Colors.white : AppColors.stone),
+        child: FaIcon(icon, size: 16, color: isActive ? Colors.white : context.colors.stone),
       ),
     );
   }
@@ -448,14 +552,14 @@ class _EntryCard extends StatelessWidget {
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.85,
         padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-        decoration: const BoxDecoration(
-          color: AppColors.paperBackground,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        decoration: BoxDecoration(
+          color: context.colors.background,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         ),
         child: Column(
           children: [
             const SizedBox(height: 10),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.stone.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: context.colors.stone.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 30),
             Expanded(
               child: SingleChildScrollView(
@@ -468,17 +572,17 @@ class _EntryCard extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(DateFormat('EEEE').format(date).toUpperCase(), style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: AppColors.stone)),
-                            Text(DateFormat('MMMM d').format(date), style: GoogleFonts.domine(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.ink)),
+                            Text(DateFormat('EEEE').format(date).toUpperCase(), style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: context.colors.stone)),
+                            Text(DateFormat('MMMM d').format(date), style: GoogleFonts.domine(fontSize: 28, fontWeight: FontWeight.bold, color: context.colors.ink)),
                           ],
                         ),
                         if (data['weather_context'] != null)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.stone.withOpacity(0.2))),
+                            decoration: BoxDecoration(color: context.colors.card, borderRadius: BorderRadius.circular(20), border: Border.all(color: context.colors.stone.withValues(alpha: 0.2))),
                             child: Row(
                               children: [
-                                const Icon(FontAwesomeIcons.cloud, size: 12, color: AppColors.stone),
+                                FaIcon(FontAwesomeIcons.cloud, size: 12, color: context.colors.stone),
                                 const SizedBox(width: 6),
                                 Text(data['weather_context'] ?? "", style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
@@ -492,20 +596,20 @@ class _EntryCard extends StatelessWidget {
                       children: [
                         const Icon(Icons.location_on, size: 14, color: AppColors.sage),
                         const SizedBox(width: 4),
-                        Text(data['location_city'] ?? "Unknown Place", style: GoogleFonts.lato(color: AppColors.stone)),
+                        Text(data['location_city'] ?? "Unknown Place", style: GoogleFonts.lato(color: context.colors.stone)),
                         const SizedBox(width: 10),
-                        Text("•  ${DateFormat('h:mm a').format(date)}", style: GoogleFonts.lato(color: AppColors.stone)),
+                        Text("•  ${DateFormat('h:mm a').format(date)}", style: GoogleFonts.lato(color: context.colors.stone)),
                       ],
                     ),
 
                     const SizedBox(height: 30),
-                    const Divider(color: Color(0xFFEEEBE0)),
+                    Divider(color: context.colors.stone.withValues(alpha: 0.15)),
                     const SizedBox(height: 20),
 
                     if (data['prompt_used'] != null) ...[
                       Text("THINKING ABOUT", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: AppColors.sage)),
                       const SizedBox(height: 5),
-                      Text(data['prompt_used'], style: GoogleFonts.domine(fontSize: 18, color: AppColors.ink)),
+                      Text(data['prompt_used'], style: GoogleFonts.domine(fontSize: 18, color: context.colors.ink)),
                       const SizedBox(height: 20),
                     ],
 
@@ -513,8 +617,8 @@ class _EntryCard extends StatelessWidget {
                       Wrap(
                         spacing: 8,
                         children: (data['tags'] as List).map<Widget>((tag) => Chip(
-                          label: Text(tag, style: GoogleFonts.lato(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.ink)),
-                          backgroundColor: AppColors.cardColor,
+                          label: Text(tag, style: GoogleFonts.lato(fontSize: 11, fontWeight: FontWeight.bold, color: context.colors.ink)),
+                          backgroundColor: context.colors.card,
                           padding: EdgeInsets.zero,
                           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         )).toList(),
@@ -524,7 +628,7 @@ class _EntryCard extends StatelessWidget {
 
                     Text(
                       data['content'] ?? "", 
-                      style: GoogleFonts.lato(fontSize: 16, height: 1.8, color: AppColors.ink)
+                      style: GoogleFonts.lato(fontSize: 16, height: 1.8, color: context.colors.ink)
                     ),
 
                     const SizedBox(height: 30),
@@ -533,9 +637,9 @@ class _EntryCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: AppColors.cardColor,
+                          color: context.colors.card,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.stone.withOpacity(0.1)),
+                          border: Border.all(color: context.colors.stone.withValues(alpha: 0.1)),
                         ),
                         child: Row(
                           children: [
@@ -543,7 +647,7 @@ class _EntryCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(8),
                                 child: data['image_url'] != null 
                                   ? Image.network(data['image_url'], width: 50, height: 50, fit: BoxFit.cover)
-                                  : Container(width: 50, height: 50, color: AppColors.ink, child: const Icon(Icons.music_note, color: Colors.white)),
+                                  : Container(width: 50, height: 50, color: context.colors.ink, child: const Icon(Icons.music_note, color: Colors.white)),
                               ),
                             const SizedBox(width: 15),
                             Expanded(
@@ -551,8 +655,8 @@ class _EntryCard extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text("SOUNDTRACK", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.sage)),
-                                  Text(data['track_name'], style: GoogleFonts.domine(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.ink), maxLines: 1),
-                                  Text(data['artist'] ?? "", style: GoogleFonts.lato(color: AppColors.stone)),
+                                  Text(data['track_name'], style: GoogleFonts.domine(fontWeight: FontWeight.bold, fontSize: 16, color: context.colors.ink), maxLines: 1),
+                                  Text(data['artist'] ?? "", style: GoogleFonts.lato(color: context.colors.stone)),
                                 ],
                               ),
                             ),
@@ -562,7 +666,7 @@ class _EntryCard extends StatelessWidget {
                                 final url = Uri.parse("https://open.spotify.com/search/$query"); 
                                 await launchUrl(url, mode: LaunchMode.externalApplication);
                               },
-                              icon: const Icon(FontAwesomeIcons.spotify, color: Color(0xFF1DB954), size: 30),
+                              icon: const FaIcon(FontAwesomeIcons.spotify, color: Color(0xFF1DB954), size: 30),
                             )
                           ],
                         ),
@@ -586,13 +690,13 @@ class _EntryCard extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.paperBackground,
-        title: Text("Delete Memory?", style: GoogleFonts.domine(fontWeight: FontWeight.bold, color: AppColors.ink)),
-        content: Text("This will permanently remove this journal entry.", style: GoogleFonts.lato(color: AppColors.stone)),
+        backgroundColor: context.colors.background,
+        title: Text("Delete Memory?", style: GoogleFonts.domine(fontWeight: FontWeight.bold, color: context.colors.ink)),
+        content: Text("This will permanently remove this journal entry.", style: GoogleFonts.lato(color: context.colors.stone)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text("CANCEL", style: GoogleFonts.lato(color: AppColors.stone, fontWeight: FontWeight.bold)),
+            child: Text("CANCEL", style: GoogleFonts.lato(color: context.colors.stone, fontWeight: FontWeight.bold)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -626,10 +730,10 @@ class _EntryCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
-          color: AppColors.cardColor,
+          color: context.colors.card,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: AppColors.stone.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-          border: Border.all(color: AppColors.stone.withOpacity(0.1)),
+          boxShadow: [BoxShadow(color: context.colors.stone.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+          border: Border.all(color: context.colors.stone.withValues(alpha: 0.1)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -638,11 +742,11 @@ class _EntryCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(DateFormat('MMM d • h:mm a').format(date), style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.stone)),
+                  Text(DateFormat('MMM d • h:mm a').format(date), style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: context.colors.stone)),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: moodColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: moodColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
                     child: Text(data['mood_label'] ?? "Mood", style: GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.bold, color: moodColor)),
                   ),
                   const SizedBox(width: 12),
@@ -657,17 +761,17 @@ class _EntryCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               
-              Text(data['content'] ?? "", maxLines: 3, overflow: TextOverflow.ellipsis, style: GoogleFonts.lato(fontSize: 14, height: 1.5, color: AppColors.ink)),
+              Text(data['content'] ?? "", maxLines: 3, overflow: TextOverflow.ellipsis, style: GoogleFonts.lato(fontSize: 14, height: 1.5, color: context.colors.ink)),
               
               if (data['track_name'] != null) ...[
                 const SizedBox(height: 12),
-                const Divider(height: 1, color: Color(0xFFEEEBE0)),
+                Divider(height: 1, color: context.colors.stone.withValues(alpha: 0.15)),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    const Icon(FontAwesomeIcons.spotify, size: 14, color: Color(0xFF1DB954)),
+                    const FaIcon(FontAwesomeIcons.spotify, size: 14, color: Color(0xFF1DB954)),
                     const SizedBox(width: 8),
-                    Expanded(child: Text("${data['track_name']} • ${data['artist']}", style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.stone), maxLines: 1)),
+                    Expanded(child: Text("${data['track_name']} • ${data['artist']}", style: GoogleFonts.lato(fontSize: 12, fontWeight: FontWeight.bold, color: context.colors.stone), maxLines: 1)),
                   ],
                 ),
               ]
@@ -738,7 +842,7 @@ class TreePainter extends CustomPainter {
 
     if (depth > 2) {
       if (colors.isNotEmpty) {
-        leafPaint.color = colors[rng.nextInt(colors.length)].withOpacity(0.8);
+        leafPaint.color = colors[rng.nextInt(colors.length)].withValues(alpha: 0.8);
         canvas.drawCircle(end, 3 + rng.nextDouble() * 4, leafPaint);
       }
     }
@@ -748,5 +852,162 @@ class TreePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(TreePainter oldDelegate) =>
+      oldDelegate.growth != growth ||
+      oldDelegate.seed != seed ||
+      oldDelegate.colors.length != colors.length;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recent Playlist Card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PlaylistCard extends StatelessWidget {
+  final QueryDocumentSnapshot doc;
+  const _PlaylistCard({required this.doc});
+
+  @override
+  Widget build(BuildContext context) {
+    final data       = doc.data() as Map<String, dynamic>;
+    final mood       = data['mood']        as String? ?? 'Reflective';
+    final arcType    = data['arc_type']    as String? ?? 'stay';
+    final trackCount = data['track_count'] as int?    ?? 0;
+    final spotifyUrl = data['spotify_url'] as String?;
+    final createdAt  = data['created_at'] != null
+        ? (data['created_at'] as Timestamp).toDate()
+        : DateTime.now();
+
+    final arcColor = arcType == 'lift'
+        ? AppColors.clay
+        : arcType == 'calm'
+            ? AppColors.sage
+            : const Color(0xFFA8A593);
+
+    final arcLabel = arcType == 'lift'
+        ? 'Lift Me'
+        : arcType == 'calm'
+            ? 'Calm Me'
+            : 'Stay Here';
+
+    final arcIcon = arcType == 'lift'
+        ? FontAwesomeIcons.sun
+        : arcType == 'calm'
+            ? FontAwesomeIcons.wind
+            : FontAwesomeIcons.leaf;
+
+    return Container(
+      width: 192,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: context.colors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: arcColor.withValues(alpha: 0.22)),
+        boxShadow: [
+          BoxShadow(
+              color: context.colors.stone.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── arc badge row ────────────────────────────────────────────
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: arcColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FaIcon(arcIcon,
+                        size: 9, color: arcColor),
+                    const SizedBox(width: 4),
+                    Text(arcLabel,
+                        style: GoogleFonts.lato(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: arcColor)),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (spotifyUrl != null)
+                const FaIcon(FontAwesomeIcons.spotify,
+                    size: 13, color: Color(0xFF1DB954)),
+            ],
+          ),
+
+          const SizedBox(height: 9),
+
+          // ── mood title ────────────────────────────────────────────────
+          Text(mood,
+              style: GoogleFonts.domine(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: context.colors.ink),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          Text("$trackCount tracks",
+              style: GoogleFonts.lato(
+                  fontSize: 11,
+                  color: context.colors.stone)),
+
+          const Spacer(),
+
+          // ── bottom row ────────────────────────────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(DateFormat('MMM d').format(createdAt),
+                  style: GoogleFonts.lato(
+                      fontSize: 10,
+                      color: context.colors.stone.withValues(alpha: 0.6))),
+              if (spotifyUrl != null)
+                GestureDetector(
+                  onTap: () async {
+                    final url = Uri.parse(spotifyUrl);
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(url,
+                          mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1DB954).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text("Open",
+                        style: GoogleFonts.lato(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF1DB954))),
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: context.colors.stone.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text("Local",
+                      style: GoogleFonts.lato(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: context.colors.stone.withValues(alpha: 0.5))),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

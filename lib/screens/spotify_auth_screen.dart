@@ -16,7 +16,7 @@ class _SpotifyAuthScreenState extends State<SpotifyAuthScreen> {
   // YOUR CONFIGURATION
   final String clientId = "d392c7212c464db4b1fb4f2fcb77bb95"; 
   final String redirectUri = "http://localhost:8080/callback"; // Arbitrary, we intercept it
-  final String scope = "user-top-read"; // We only need to read top artists
+  final String scope = "user-top-read playlist-modify-public playlist-modify-private";
 
   @override
   void initState() {
