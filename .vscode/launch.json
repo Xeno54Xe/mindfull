@@ -9,9 +9,7 @@
                 "-d",
                 "chrome",
                 "--web-port",
-                "5000",
-                "--web-browser-flag",
-                "--user-data-dir=C:\\Users\\lenovo\\chrome-flutter-profile"
+                "5000"
             ]
         }
     ]

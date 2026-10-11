@@ -38,6 +38,10 @@ class _ResultScreenState extends State<ResultScreen> {
         ? (widget.data['score'] as num).round()
         : 5;
     _selectedArc = score <= 4 ? 'lift' : score <= 7 ? 'stay' : 'calm';
+    // Pre-warm Render so it's ready when user taps "Generate Playlist"
+    http.get(Uri.parse('$_backendUrl/')).timeout(
+      const Duration(seconds: 10),
+    ).catchError((_) {});
   }
 
   Future<void> _launchSpotify(String trackName) async {
@@ -65,13 +69,14 @@ class _ResultScreenState extends State<ResultScreen> {
           'music_profile': musicProfile,
           'arc_type':      _selectedArc,
         }),
-      ).timeout(const Duration(seconds: 45));
+      ).timeout(const Duration(seconds: 90));
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final playlistData = jsonDecode(response.body) as Map<String, dynamic>;
-        if ((playlistData['tracks'] as List?)?.isEmpty ?? true) {
+        final tracks = playlistData['tracks'] as List?;
+        if (tracks == null || tracks.length < 4) {
           _showSnack('Couldn\'t generate playlist. Try again.', AppColors.clay);
           return;
         }

@@ -869,7 +869,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                                     const Color(0xFF1DB954).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: const Icon(FontAwesomeIcons.spotify,
+                              child: const FaIcon(FontAwesomeIcons.spotify,
                                   size: 14,
                                   color: Color(0xFF1DB954)),
                             ),
