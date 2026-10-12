@@ -39,7 +39,12 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
   Future<void> checkEmailVerified() async {
     // Reload user data from Firebase to get the latest status
-    await FirebaseAuth.instance.currentUser?.reload();
+    try {
+      await FirebaseAuth.instance.currentUser?.reload();
+    } catch (_) {
+      return; // offline — try again on the next tick
+    }
+    if (!mounted) return;
 
     setState(() {
       isEmailVerified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
@@ -77,16 +82,15 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.paperBackground,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+          icon: Icon(Icons.arrow_back, color: context.colors.ink),
           onPressed: () {
-            // Log them out if they cancel
+            // Log them out if they cancel — AuthGate then shows the login screen
             FirebaseAuth.instance.signOut();
-            Navigator.pop(context);
           },
         ),
       ),
@@ -99,18 +103,18 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
             const SizedBox(height: 30),
             Text(
               "Verify your email",
-              style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.ink),
+              style: GoogleFonts.domine(fontSize: 32, fontWeight: FontWeight.bold, color: context.colors.ink),
             ),
             const SizedBox(height: 20),
             Text(
               "We've sent a verification link to your email address. Please click the link to activate your account.",
               textAlign: TextAlign.center,
-              style: GoogleFonts.lato(fontSize: 18, color: AppColors.stone, height: 1.5),
+              style: GoogleFonts.lato(fontSize: 18, color: context.colors.stone, height: 1.5),
             ),
             const SizedBox(height: 40),
             const CircularProgressIndicator(color: AppColors.sage),
             const SizedBox(height: 20),
-            Text("Waiting for verification...", style: GoogleFonts.lato(color: AppColors.stone)),
+            Text("Waiting for verification...", style: GoogleFonts.lato(color: context.colors.stone)),
             const SizedBox(height: 40),
             TextButton(
               onPressed: resendVerificationEmail,

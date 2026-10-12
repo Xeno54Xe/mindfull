@@ -70,10 +70,10 @@ class _WritingPageState extends State<WritingPage> {
 
   Future<void> _saveEntry() async {
     if (_journalController.text.trim().isEmpty) return;
-    setState(() => _isSaving = true);
-
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+
+    setState(() => _isSaving = true);
 
     try {
       final now = DateTime.now();
@@ -120,6 +120,8 @@ class _WritingPageState extends State<WritingPage> {
       });
 
       aiAnalysis['music_profile_used'] = musicProfile;
+      // AI unavailable — show the mood the user picked themselves
+      aiAnalysis['score'] ??= widget.moodValue.round();
       if (mounted) _showAnalysisResult(aiAnalysis);
     } catch (e) {
       if (mounted) {
@@ -127,8 +129,8 @@ class _WritingPageState extends State<WritingPage> {
           content: Text("Error: $e"),
           backgroundColor: AppColors.clay,
         ));
+        setState(() => _isSaving = false);
       }
-      setState(() => _isSaving = false);
     }
   }
 
@@ -422,9 +424,15 @@ class _AnalysisBottomSheetContentState
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: data['image_url'] != null
+                      child: (data['image_url'] as String? ?? '').isNotEmpty
                           ? Image.network(data['image_url'],
-                              width: 60, height: 60, fit: BoxFit.cover)
+                              width: 60, height: 60, fit: BoxFit.cover,
+                              errorBuilder: (c, e, s) => Container(
+                                  width: 60,
+                                  height: 60,
+                                  color: context.colors.ink,
+                                  child: const Icon(Icons.music_note,
+                                      color: Colors.white)))
                           : Container(
                               width: 60,
                               height: 60,

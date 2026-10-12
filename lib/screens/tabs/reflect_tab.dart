@@ -155,23 +155,27 @@ class _ReflectTabState extends State<ReflectTab> {
   // --- WEATHER FETCHER ---
   Future<void> _fetchLiveWeather() async {
     try {
-      // FIX: use HTTPS — plain HTTP is blocked on Android 9+ by default
+      // ip-api.com only serves HTTPS on its paid tier (free HTTPS returns 403),
+      // and plain HTTP is blocked on Android 9+ — ipwho.is is free over HTTPS.
       final locResponse = await http
-          .get(Uri.parse('https://ip-api.com/json'))
+          .get(Uri.parse('https://ipwho.is/'))
           .timeout(const Duration(seconds: 10));
       if (locResponse.statusCode != 200) throw Exception("Location Error");
       final locData = jsonDecode(locResponse.body);
-      double lat = locData['lat'];
-      double lon = locData['lon'];
+      if (locData['success'] == false) throw Exception("Location Error");
+      double lat = (locData['latitude'] as num).toDouble();
+      double lon = (locData['longitude'] as num).toDouble();
       String city = locData['city'] ?? "Unknown";
 
       final weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current_weather=true";
-      final weatherResponse = await http.get(Uri.parse(weatherUrl));
+      final weatherResponse = await http
+          .get(Uri.parse(weatherUrl))
+          .timeout(const Duration(seconds: 10));
       if (weatherResponse.statusCode != 200) throw Exception("Weather API Error");
       final weatherData = jsonDecode(weatherResponse.body);
       
-      int code = weatherData['current_weather']['weathercode'];
-      double temp = weatherData['current_weather']['temperature'];
+      int code = (weatherData['current_weather']['weathercode'] as num).toInt();
+      double temp = (weatherData['current_weather']['temperature'] as num).toDouble();
       
       String label = "Clear";
       FaIconData icon = FontAwesomeIcons.sun;

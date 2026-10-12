@@ -1,7 +1,7 @@
 from google import genai
 import os
 
-GEMINI_KEY = "AIzaSyD59D-Y8Y5XEKqRnDnve7gwaqirkOIpOn0"
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 print("--- CHECKING AVAILABLE MODELS ---")
 try:

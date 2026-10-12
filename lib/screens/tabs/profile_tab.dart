@@ -43,7 +43,10 @@ class _ProfileTabState extends State<ProfileTab> {
     setState(() => _isLoadingProfile = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        if (mounted) setState(() => _isLoadingProfile = false);
+        return;
+      }
 
       final futures = await Future.wait([
         FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
@@ -95,8 +98,9 @@ class _ProfileTabState extends State<ProfileTab> {
     setState(() => _isLoggingOut = true);
     try {
       await FirebaseAuth.instance.signOut();
+      // Only drop account-bound data — keep device prefs (theme, intro seen).
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      await prefs.remove('spotify_token');
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -143,10 +147,23 @@ class _ProfileTabState extends State<ProfileTab> {
     if (confirm != true) return;
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+      // Firestore does not cascade deletes, so remove the subcollections
+      // (entries, vents, playlists, artist picks) before the user document.
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      for (final name in const ['entries', 'journal', 'playlists', 'profile']) {
+        final snap = await userDoc.collection(name).get();
+        for (var i = 0; i < snap.docs.length; i += 400) {
+          final batch = FirebaseFirestore.instance.batch();
+          for (final doc in snap.docs.skip(i).take(400)) {
+            batch.delete(doc.reference);
+          }
+          await batch.commit();
+        }
+      }
+      await userDoc.delete();
       await user.delete();
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      await prefs.remove('spotify_token');
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),

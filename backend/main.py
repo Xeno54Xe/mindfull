@@ -16,6 +16,9 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+# Groq retires model IDs periodically (llama-3.3-70b-versatile was shut down
+# in Aug 2026) — override via env so a swap doesn't need a code change.
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 # --- CLIENTS ---
 try:
@@ -111,7 +114,7 @@ _SAFETY_FALLBACK = {
 
 # --- HELPER: LLM CALL ---
 def call_llama(prompt: str, system_override: Optional[str] = None) -> Optional[dict]:
-    """Hits Groq API (Llama 3.3) for instant responses. Returns None on failure."""
+    """Hits Groq API for instant responses. Returns None on failure."""
     sys_content = system_override if system_override else _SYSTEM_PROMPT
     try:
         completion = client.chat.completions.create(
@@ -119,7 +122,7 @@ def call_llama(prompt: str, system_override: Optional[str] = None) -> Optional[d
                 {"role": "system", "content": sys_content},
                 {"role": "user", "content": prompt},
             ],
-            model="llama-3.3-70b-versatile",
+            model=GROQ_MODEL,
             temperature=0.6,
             response_format={"type": "json_object"}
         )
@@ -159,7 +162,17 @@ def search_artists(q: str = ""):
                 "6eUKZXaKkcviH0Ku9w2n3V",  # Ed Sheeran
                 "0du5cEVh5yTK9QJze8zA0C",  # Bruno Mars
             ]
-            results = sp_generic.artists(popular_ids)
+            # Spotify removed the batch "Get Several Artists" endpoint for
+            # Development Mode apps (Feb 2026), so look each one up individually.
+            def _get_artist(artist_id: str) -> Optional[dict]:
+                try:
+                    return sp_generic.artist(artist_id)
+                except Exception as e:
+                    print(f"⚠️ Artist lookup failed for {artist_id}: {e}")
+                    return None
+
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                results = [a for a in pool.map(_get_artist, popular_ids) if a]
             return {
                 "artists": [
                     {
@@ -167,7 +180,7 @@ def search_artists(q: str = ""):
                         "image": a["images"][0]["url"] if a.get("images") else None,
                         "id": a["id"],
                     }
-                    for a in results["artists"]
+                    for a in results
                 ]
             }
 
@@ -204,49 +217,49 @@ def analyze_mood(entry: JournalEntry):
     }
 
     # ── Step 1: LLM mood + song analysis ────────────────────────────────────
-    try:
-        prompt = f"""
-        Analyze this diary entry (Time: {entry.local_time}):
-        \"\"\"{entry.text}\"\"\"
+    prompt = f"""
+    Analyze this diary entry (Time: {entry.local_time}):
+    \"\"\"{entry.text}\"\"\"
 
-        NOTE: The entry may be in English, Hindi, or Hinglish. Understand it natively and detect the true emotional state accurately.
+    NOTE: The entry may be in English, Hindi, or Hinglish. Understand it natively and detect the true emotional state accurately.
 
-        USER TASTE PROFILE (The user LOVES these artists):
-        "{entry.music_profile}"
+    USER TASTE PROFILE (The user LOVES these artists):
+    "{entry.music_profile}"
 
-        Task:
-        1. Identify the Mood (1 English word) & Score (1-10).
-            SCORING RUBRIC:
-            - 1-3: High Distress (Sadness, Anxiety, Overwhelm, Anger, Self-doubt).
-            - 4-6: Neutral, Calm, Reflective, Bored, Tired.
-            - 7-10: Happy, Excited, Proud, Grateful, Energetic.
+    Task:
+    1. Identify the Mood (1 English word) & Score (1-10).
+        SCORING RUBRIC:
+        - 1-3: High Distress (Sadness, Anxiety, Overwhelm, Anger, Self-doubt).
+        - 4-6: Neutral, Calm, Reflective, Bored, Tired.
+        - 7-10: Happy, Excited, Proud, Grateful, Energetic.
 
-        2. Suggest ONE real song that exists on Spotify.
-            RECOMMENDATION RULES (CRITICAL):
-            - Prioritize artists from the USER TASTE PROFILE that match the MOOD.
-            - Example: user loves "Taylor Swift" + Sad → "All Too Well" or "this is me trying".
-            - Example: user loves "The Weeknd" + Happy → "Starboy" or "Blinding Lights".
-            - ANTI-CLICHÉ: Do NOT suggest "Happy" by Pharrell or "Someone Like You" by Adele unless explicitly requested.
-            - If distressed: lean toward calming, healing, or hopeful songs.
+    2. Suggest ONE real song that exists on Spotify.
+        RECOMMENDATION RULES (CRITICAL):
+        - Prioritize artists from the USER TASTE PROFILE that match the MOOD.
+        - Example: user loves "Taylor Swift" + Sad → "All Too Well" or "this is me trying".
+        - Example: user loves "The Weeknd" + Happy → "Starboy" or "Blinding Lights".
+        - ANTI-CLICHÉ: Do NOT suggest "Happy" by Pharrell or "Someone Like You" by Adele unless explicitly requested.
+        - If distressed: lean toward calming, healing, or hopeful songs.
 
-        3. Give a short reason in English (1-2 sentences, mention their taste if relevant).
+    3. Give a short reason in English (1-2 sentences, mention their taste if relevant).
 
-        Return ONLY JSON with keys: mood (string), artist (string), track_name (string), reason (string), score (integer 1-10).
-        """
+    Return ONLY JSON with keys: mood (string), artist (string), track_name (string), reason (string), score (integer 1-10).
+    """
 
-        ai_data = call_llama(prompt)
-        if ai_data is None:
-            ai_data = _SAFETY_FALLBACK.copy()
-        # Coerce score to int safely
-        if "score" in ai_data:
-            try:
-                ai_data["score"] = int(round(float(ai_data["score"])))
-            except (ValueError, TypeError):
-                ai_data["score"] = 5
-        data.update(ai_data)
+    ai_data = call_llama(prompt)
+    if ai_data is None:
+        # The LLM is unreachable. Fail loudly instead of returning the safety
+        # fallback — otherwise every entry written during an outage gets saved
+        # as "Overwhelmed 2/10" and skews the user's mood history.
+        raise HTTPException(status_code=503, detail="Mood analysis is temporarily unavailable.")
 
-    except Exception as e:
-        print(f"❌ LLM Analysis Error: {e}")
+    # Coerce score to int safely
+    if "score" in ai_data:
+        try:
+            ai_data["score"] = max(1, min(10, int(round(float(ai_data["score"])))))
+        except (ValueError, TypeError):
+            ai_data["score"] = 5
+    data.update(ai_data)
 
     # ── Step 2: Spotify album art lookup (isolated — never contaminates step 1) ──
     try:
@@ -631,21 +644,25 @@ def create_spotify_playlist(request: CreatePlaylistRequest):
     try:
         sp_user = spotipy.Spotify(auth=request.access_token)
 
-        # Fetch the authenticated user's Spotify ID
-        user_info = sp_user.me()
-        user_id    = user_info["id"]
-
-        # Create the private playlist
-        playlist = sp_user.user_playlist_create(
-            user=user_id,
-            name=request.title,
-            public=False,
-            description="Crafted by MindFull — your AI Therapist & DJ 🎵✨",
+        # Create the private playlist. Spotify removed
+        # POST /users/{id}/playlists (Feb 2026) in favour of POST /me/playlists,
+        # and renamed the playlist /tracks endpoints to /items, so call the
+        # new paths directly rather than through spotipy's older helpers.
+        playlist = sp_user._post(
+            "me/playlists",
+            payload={
+                "name": request.title,
+                "public": False,
+                "description": "Crafted by MindFull — your AI Therapist & DJ 🎵✨",
+            },
         )
 
         # Add tracks in one batch (Spotify accepts up to 100 per call)
         if request.track_uris:
-            sp_user.playlist_add_items(playlist["id"], request.track_uris[:100])
+            sp_user._post(
+                f"playlists/{playlist['id']}/items",
+                payload={"uris": request.track_uris[:100]},
+            )
 
         url = playlist["external_urls"]["spotify"]
         print(f"✅ Playlist created: {url}")

@@ -31,30 +31,18 @@ class _LoginScreenState extends State<LoginScreen> {
           password: _passwordController.text.trim(),
         );
         await cred.user?.sendEmailVerification();
+        // AuthGate shows the verify-email screen until the link is clicked.
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Account created! Check your email to verify before signing in."),
-            backgroundColor: AppColors.sage,
-            duration: Duration(seconds: 5),
-          ));
-          setState(() => isSignUp = false);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AuthGate()),
+          );
         }
       } else {
-        final credential = await auth.signInWithEmailAndPassword(
+        await auth.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        if (credential.user != null && !credential.user!.emailVerified) {
-          await auth.signOut();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text("Please verify your email first. Check your inbox for the link."),
-              backgroundColor: AppColors.clay,
-              duration: Duration(seconds: 5),
-            ));
-          }
-          return;
-        }
+        // Unverified accounts are held at the verify-email screen by AuthGate.
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const AuthGate()),

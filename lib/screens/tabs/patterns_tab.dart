@@ -172,9 +172,9 @@ class _PatternsTabState extends State<PatternsTab> {
 
   // --- 2. AI DEEP ANALYSIS (Active) ---
   Future<void> _generateWeeklyReport() async {
-    setState(() => _isAnalyzing = true);
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+    setState(() => _isAnalyzing = true);
 
     try {
       final now = DateTime.now();

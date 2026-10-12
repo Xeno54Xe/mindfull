@@ -50,7 +50,10 @@ class _WriteScreenState extends State<WriteScreen> {
             .doc(user.uid)
             .get();
         if (doc.exists && doc.data()!.containsKey('music_profile')) {
-          setState(() => _userMusicProfile = doc.data()!['music_profile']);
+          final profile = doc.data()!['music_profile'];
+          if (mounted && profile is String && profile.trim().isNotEmpty) {
+            setState(() => _userMusicProfile = profile);
+          }
         }
       } catch (e) {
         debugPrint("Error fetching profile: $e");
@@ -133,6 +136,7 @@ class _WriteScreenState extends State<WriteScreen> {
           'mood_score': (data['score'] ?? 5).round(),
           'music_profile_used': _userMusicProfile,
         });
+        data['music_profile_used'] = _userMusicProfile;
         if (mounted) {
           Navigator.pushReplacement(
               context,

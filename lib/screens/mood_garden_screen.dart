@@ -81,7 +81,7 @@ class _MoodGardenScreenState extends State<MoodGardenScreen>
             .doc(user?.uid)
             .collection('entries')
             .orderBy('timestamp', descending: false)
-            .limit(60)
+            .limitToLast(60)
             .snapshots(),
         builder: (context, snapshot) {
           final docs = snapshot.data?.docs ?? [];

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../screens/login_screen.dart';
+import '../screens/verify_email_screen.dart';
 import '../screens/onboarding_screen.dart';
 import '../screens/main_screen.dart'; // <--- FIXED: Points to your existing Shell
 
@@ -20,6 +21,15 @@ class AuthGate extends StatelessWidget {
 
         // 2. User IS logged in -> Check Firestore for 'diary_name'
         final user = snapshot.data!;
+
+        // Email/password accounts must confirm their address first.
+        // (Google accounts always arrive verified.)
+        final usesPassword =
+            user.providerData.any((p) => p.providerId == 'password');
+        if (usesPassword && !user.emailVerified) {
+          return const VerifyEmailScreen();
+        }
+
         return StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
           builder: (context, userSnapshot) {

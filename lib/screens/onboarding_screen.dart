@@ -103,10 +103,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _completeOnboarding() async {
     if (_diaryController.text.trim().isEmpty) return;
     
-    setState(() => _isSaving = true);
     final user = FirebaseAuth.instance.currentUser;
-    
-    if (user != null) {
+    if (user == null) return;
+
+    setState(() => _isSaving = true);
+    try {
       // Create the simple music profile string
       String musicProfile = _selectedArtists.map((a) => a['name']).join(", ");
       if (musicProfile.isEmpty) musicProfile = "General Pop";
@@ -123,6 +124,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('profile').doc('music').set({
         'top_artists': _selectedArtists
       });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Couldn't save your profile. Check your connection and try again."),
+          backgroundColor: AppColors.clay,
+        ));
+      }
     }
   }
 
